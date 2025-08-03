@@ -874,7 +874,9 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
-        version: '1.0.0'
+        version: '1.0.0',
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        transcription_service: process.env.TRANSCRIPTION_SERVICE_URL ? 'configured' : 'not_configured'
     });
 });
 
@@ -925,16 +927,35 @@ app.post('/api/transcription/audio', async (req, res) => {
     try {
         const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
         
-        // 转发请求到Python转录服务
-        const formData = new FormData();
-        if (req.files && req.files.audio_file) {
-            formData.append('audio_file', req.files.audio_file.data, req.files.audio_file.name);
+        // 检查是否有上传的文件
+        if (!req.files || !req.files.audio_file) {
+            return res.status(400).json({ 
+                success: false, 
+                error: '未找到音频文件',
+                text: '',
+                language: 'zh'
+            });
         }
+        
+        // 使用form-data库创建FormData
+        const FormData = require('form-data');
+        const formData = new FormData();
+        
+        // 添加文件到FormData
+        formData.append('audio_file', req.files.audio_file.data, {
+            filename: req.files.audio_file.name,
+            contentType: req.files.audio_file.mimetype
+        });
         
         const response = await fetch(`${transcriptionServiceUrl}/transcribe/audio`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: formData.getHeaders()
         });
+        
+        if (!response.ok) {
+            throw new Error(`转录服务响应错误: ${response.status}`);
+        }
         
         const result = await response.json();
         
@@ -945,21 +966,18 @@ app.post('/api/transcription/audio', async (req, res) => {
                 text: result.text,
                 language: result.language || 'zh',
                 timestamp: new Date(),
-                type: 'upload',
-                userId: req.body.userId || 'anonymous'
+                type: 'transcription',
+                author: '语音转录',
+                userId: req.body.userId || 'anonymous',
+                time: new Date().toLocaleTimeString('zh-CN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                })
             };
             
             // 保存转录记录
             if (mongoose.connection.readyState === 1) {
-                await new Message({
-                    ...transcriptionRecord,
-                    type: 'transcription',
-                    author: '语音转录',
-                    time: new Date().toLocaleTimeString('zh-CN', { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                    })
-                }).save();
+                await dataService.saveMessage(transcriptionRecord);
             }
         }
         
@@ -968,7 +986,7 @@ app.post('/api/transcription/audio', async (req, res) => {
         logger.error('转录代理失败: ' + error.message);
         res.status(500).json({ 
             success: false, 
-            error: '转录服务暂时不可用',
+            error: '转录服务暂时不可用: ' + error.message,
             text: '',
             language: 'zh'
         });
@@ -981,9 +999,14 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: '服务器内部错误' });
 });
 
-// 404处理
+// 404处理 - 对于API请求返回JSON，对于页面请求返回index.html
 app.use((req, res) => {
-    res.status(404).json({ error: '接口不存在' });
+    if (req.path.startsWith('/api/')) {
+        res.status(404).json({ error: '接口不存在' });
+    } else {
+        // 对于非API请求，返回index.html（SPA路由支持）
+        res.sendFile(__dirname + '/../index.html');
+    }
 });
 
 // 辅助函数：根据用户ID找到socket连接
