@@ -11,6 +11,10 @@ class TranscriptionClient {
         this.isConnected = false;
         this.currentRoomId = null;
         this.recordingStartTime = null;
+        this.isStreamingMode = true; // 默认使用流式模式
+        this.audioContext = null;
+        this.processor = null;
+        this.stream = null;
         
         // 录音配置
         this.recordingConfig = {
@@ -53,6 +57,9 @@ class TranscriptionClient {
             // 检查麦克风权限
             await this.checkMicrophonePermission();
             
+            // 设置Socket.IO事件监听
+            this.setupSocketListeners();
+            
             // 测试转录服务连接
             const connected = await this.testConnection();
             if (!connected) {
@@ -63,6 +70,47 @@ class TranscriptionClient {
         } catch (error) {
             console.error('语音转录客户端初始化失败:', error);
         }
+    }
+    
+    setupSocketListeners() {
+        if (!window.realtimeClient || !window.realtimeClient.socket) {
+            console.warn('⚠️ Socket.IO客户端未找到，流式转录功能可能不可用');
+            return;
+        }
+        
+        const socket = window.realtimeClient.socket;
+        
+        // 监听流式转录启动成功
+        socket.on('streamingTranscriptionStarted', (data) => {
+            console.log('✅ 流式转录已启动:', data);
+            this.showToast('实时转录已启动', 'success');
+        });
+        
+        // 监听流式转录结果
+        socket.on('streamingTranscriptionResult', (data) => {
+            console.log('📝 流式转录结果:', data);
+            this.handleStreamingTranscriptionResult(data);
+        });
+        
+        // 监听流式转录停止
+        socket.on('streamingTranscriptionStopped', (data) => {
+            console.log('⏹️ 流式转录已停止:', data);
+            this.showToast('实时转录已停止', 'info');
+        });
+        
+        // 监听流式转录错误
+        socket.on('streamingTranscriptionError', (data) => {
+            console.error('❌ 流式转录错误:', data);
+            this.showToast('转录服务错误: ' + data.error, 'error');
+        });
+        
+        // 监听其他用户的转录结果
+        socket.on('transcriptionReceived', (data) => {
+            if (data.isStreaming) {
+                console.log('📝 收到其他用户的转录:', data);
+                this.displayTranscriptionFromOthers(data);
+            }
+        });
     }
     
     async checkMicrophonePermission() {
@@ -485,3 +533,254 @@ function toggleTranscription() {
 function getTranscriptionStatus() {
     return window.transcriptionClient.getRecordingStatus();
 }
+
+// =============== 流式转录扩展方法 ===============
+
+// 为TranscriptionClient类添加流式转录方法
+Object.assign(TranscriptionClient.prototype, {
+    async startStreamingTranscription(roomId) {
+        if (!window.realtimeClient || !window.realtimeClient.socket) {
+            throw new Error('Socket.IO客户端未连接');
+        }
+        
+        const socket = window.realtimeClient.socket;
+        socket.emit('startStreamingTranscription', { roomId });
+    },
+    
+    async stopStreamingTranscription() {
+        if (!window.realtimeClient || !window.realtimeClient.socket) {
+            return;
+        }
+        
+        const socket = window.realtimeClient.socket;
+        socket.emit('stopStreamingTranscription');
+    },
+    
+    sendAudioData(pcmData) {
+        if (!window.realtimeClient || !window.realtimeClient.socket) {
+            return;
+        }
+        
+        const socket = window.realtimeClient.socket;
+        socket.emit('audioData', { audioData: pcmData });
+    },
+    
+    convertToPCM16(float32Array) {
+        const buffer = new ArrayBuffer(float32Array.length * 2);
+        const view = new DataView(buffer);
+        
+        for (let i = 0; i < float32Array.length; i++) {
+            const sample = Math.max(-1, Math.min(1, float32Array[i]));
+            view.setInt16(i * 2, sample * 0x7FFF, true);
+        }
+        
+        return buffer;
+    },
+    
+    handleStreamingTranscriptionResult(data) {
+        const { type, text, confidence, timestamp } = data;
+        
+        if (!text || text.trim() === '') {
+            return;
+        }
+        
+        console.log(`📝 ${type === 'partial' ? '部分' : '最终'}转录结果:`, text);
+        
+        if (type === 'partial') {
+            this.updatePartialTranscription(text);
+        } else if (type === 'final') {
+            this.addFinalTranscription(text, confidence, timestamp);
+        }
+    },
+    
+    updatePartialTranscription(text) {
+        let partialDiv = document.getElementById('partialTranscription');
+        if (!partialDiv) {
+            partialDiv = document.createElement('div');
+            partialDiv.id = 'partialTranscription';
+            partialDiv.className = 'partial-transcription';
+            partialDiv.style.cssText = `
+                background: rgba(99, 102, 241, 0.1);
+                border: 1px dashed #6366f1;
+                border-radius: 8px;
+                padding: 8px 12px;
+                margin: 5px 0;
+                font-style: italic;
+                color: #6366f1;
+                animation: pulse 2s infinite;
+            `;
+            
+            const messagesContainer = document.getElementById('messages');
+            if (messagesContainer) {
+                messagesContainer.appendChild(partialDiv);
+                scrollToBottom();
+            }
+        }
+        
+        partialDiv.innerHTML = `🎙️ [正在转录...] ${text}`;
+    },
+    
+    addFinalTranscription(text, confidence, timestamp) {
+        const partialDiv = document.getElementById('partialTranscription');
+        if (partialDiv) {
+            partialDiv.remove();
+        }
+        
+        const transcriptionMessage = {
+            type: 'transcription',
+            text: `🎙️ [语音转录] ${text}`,
+            author: currentUsername || '语音转录',
+            userId: currentUserId || 'transcription-system',
+            time: new Date().toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            }),
+            timestamp: timestamp || Date.now(),
+            isTranscription: true,
+            confidence: confidence,
+            isStreaming: true
+        };
+        
+        if (typeof addMessage === 'function') {
+            addMessage('transcription', transcriptionMessage.text, transcriptionMessage.author, transcriptionMessage.userId);
+        } else {
+            if (typeof messages !== 'undefined') {
+                messages.push(transcriptionMessage);
+            }
+            if (typeof renderMessage === 'function') {
+                renderMessage(transcriptionMessage);
+            }
+            if (typeof scrollToBottom === 'function') {
+                scrollToBottom();
+            }
+        }
+        
+        this.showToast(`语音转录完成 (${Math.round(confidence * 100)}%)`, 'success');
+    },
+    
+    displayTranscriptionFromOthers(data) {
+        const transcriptionMessage = {
+            type: 'transcription',
+            text: `🎙️ [${data.author}的语音] ${data.text}`,
+            author: data.author,
+            userId: data.userId,
+            time: new Date(data.timestamp).toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            }),
+            timestamp: data.timestamp,
+            isTranscription: true,
+            isFromOthers: true
+        };
+        
+        if (typeof addMessage === 'function') {
+            addMessage('transcription', transcriptionMessage.text, transcriptionMessage.author, transcriptionMessage.userId);
+        } else {
+            if (typeof messages !== 'undefined') {
+                messages.push(transcriptionMessage);
+            }
+            if (typeof renderMessage === 'function') {
+                renderMessage(transcriptionMessage);
+            }
+            if (typeof scrollToBottom === 'function') {
+                scrollToBottom();
+            }
+        }
+    },
+    
+    async startStreamingMode(roomId) {
+        console.log('🌊 启动流式转录模式');
+        
+        try {
+            this.stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                    sampleRate: 16000
+                }
+            });
+            
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 16000
+            });
+            
+            const source = this.audioContext.createMediaStreamSource(this.stream);
+            this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+            
+            this.processor.onaudioprocess = (event) => {
+                if (this.isRecording) {
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    const pcmData = this.convertToPCM16(inputData);
+                    this.sendAudioData(pcmData);
+                }
+            };
+            
+            source.connect(this.processor);
+            this.processor.connect(this.audioContext.destination);
+            
+            await this.startStreamingTranscription(roomId);
+            
+            this.isRecording = true;
+            this.recordingStartTime = Date.now();
+            
+            console.log('🎙️ 开始流式录音和转录');
+            this.showToast('开始实时语音转录', 'info');
+            this.updateRecordingUI(true);
+            
+        } catch (error) {
+            console.error('启动流式转录失败:', error);
+            this.showToast('无法启动流式转录: ' + error.message, 'error');
+            throw error;
+        }
+    },
+    
+    async stopStreamingMode() {
+        try {
+            if (this.processor) {
+                this.processor.disconnect();
+                this.processor = null;
+            }
+            
+            if (this.audioContext) {
+                await this.audioContext.close();
+                this.audioContext = null;
+            }
+            
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+            }
+            
+            await this.stopStreamingTranscription();
+            
+            this.isRecording = false;
+            
+            const partialDiv = document.getElementById('partialTranscription');
+            if (partialDiv) {
+                partialDiv.remove();
+            }
+            
+            console.log('⏹️ 流式转录已停止');
+            this.showToast('实时转录已停止', 'info');
+            this.updateRecordingUI(false);
+            
+        } catch (error) {
+            console.error('停止流式转录失败:', error);
+        }
+    }
+});
+
+// 更新toggleRecording方法以支持流式模式
+const originalToggleRecording = TranscriptionClient.prototype.toggleRecording;
+TranscriptionClient.prototype.toggleRecording = function() {
+    if (this.isStreamingMode) {
+        if (this.isRecording) {
+            this.stopStreamingMode();
+        } else {
+            this.startStreamingMode(this.currentRoomId || currentRoomId);
+        }
+    } else {
+        return originalToggleRecording.call(this);
+    }
+};

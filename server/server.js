@@ -11,6 +11,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 const axios = require('axios');
 const fs = require('fs-extra');
+const WebSocket = require('ws');
 require('dotenv').config();
 
 const app = express();
@@ -651,10 +652,101 @@ io.on('connection', (socket) => {
         }
     });
     
+    // 处理流式转录开始
+    socket.on('startStreamingTranscription', async (data) => {
+        try {
+            const { roomId } = data;
+            logger.info(`用户 ${socket.id} 开始流式转录 in room ${roomId}`);
+            
+            // 初始化AssemblyAI流式客户端（如果还没有）
+            if (!assemblyAIStreamingClient) {
+                const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
+                assemblyAIStreamingClient = new AssemblyAIStreamingClient(assemblyaiApiKey);
+                await assemblyAIStreamingClient.connect();
+            }
+            
+            // 为这个客户端添加消息处理器
+            assemblyAIStreamingClient.addMessageHandler(socket.id, (transcriptionData) => {
+                // 发送转录结果给客户端
+                socket.emit('streamingTranscriptionResult', {
+                    ...transcriptionData,
+                    roomId: roomId,
+                    userId: socket.userId || socket.id
+                });
+                
+                // 如果是最终结果，也发送给房间内的其他用户
+                if (transcriptionData.type === 'final') {
+                    socket.to(roomId).emit('transcriptionReceived', {
+                        text: transcriptionData.text,
+                        author: '语音转录',
+                        userId: socket.userId || socket.id,
+                        timestamp: transcriptionData.timestamp,
+                        isStreaming: true
+                    });
+                }
+            });
+            
+            socket.emit('streamingTranscriptionStarted', { success: true });
+            
+        } catch (error) {
+            logger.error('启动流式转录失败:', error);
+            socket.emit('streamingTranscriptionError', { 
+                error: error.message 
+            });
+        }
+    });
+    
+    // 处理音频数据流
+    socket.on('audioData', (data) => {
+        try {
+            if (assemblyAIStreamingClient && assemblyAIStreamingClient.isConnected) {
+                // 将音频数据发送给AssemblyAI
+                assemblyAIStreamingClient.sendAudioData(data.audioData);
+            }
+        } catch (error) {
+            logger.error('处理音频数据失败:', error);
+        }
+    });
+    
+    // 处理流式转录停止
+    socket.on('stopStreamingTranscription', async () => {
+        try {
+            logger.info(`用户 ${socket.id} 停止流式转录`);
+            
+            // 移除消息处理器
+            if (assemblyAIStreamingClient) {
+                assemblyAIStreamingClient.removeMessageHandler(socket.id);
+                
+                // 如果没有其他客户端在使用，断开AssemblyAI连接
+                if (assemblyAIStreamingClient.messageHandlers.size === 0) {
+                    await assemblyAIStreamingClient.disconnect();
+                    assemblyAIStreamingClient = null;
+                }
+            }
+            
+            socket.emit('streamingTranscriptionStopped', { success: true });
+            
+        } catch (error) {
+            logger.error('停止流式转录失败:', error);
+        }
+    });
+    
     // 断开连接
     socket.on('disconnect', async () => {
         try {
             logger.info('用户断开连接: ' + socket.id);
+            
+            // 清理流式转录资源
+            if (assemblyAIStreamingClient) {
+                assemblyAIStreamingClient.removeMessageHandler(socket.id);
+                
+                // 如果没有其他客户端在使用，断开AssemblyAI连接
+                if (assemblyAIStreamingClient.messageHandlers.size === 0) {
+                    await assemblyAIStreamingClient.disconnect();
+                    assemblyAIStreamingClient = null;
+                    logger.info('AssemblyAI流式转录连接已关闭（无活跃客户端）');
+                }
+            }
             
             // 查找该socket对应的参与者并更新状态
             const participant = await dataService.findParticipantBySocketId(socket.id);
@@ -1119,8 +1211,154 @@ async function transcribeWithAssemblyAI(audioFile) {
     }
 }
 
-// 本地Whisper转录服务已移至独立的Python服务
-// 该Node.js服务作为代理，将请求转发到Python转录服务
+// AssemblyAI流式转录WebSocket处理类
+class AssemblyAIStreamingClient {
+    constructor(assemblyaiApiKey) {
+        this.apiKey = assemblyaiApiKey;
+        this.websocket = null;
+        this.sessionId = null;
+        this.isConnected = false;
+        this.messageHandlers = new Map();
+    }
+    
+    async connect() {
+        try {
+            // 创建临时会话以获取流式转录token
+            const response = await axios.post('https://api.assemblyai.com/v2/realtime/token', 
+                { expires_in: 3600 }, // 1小时有效期
+                {
+                    headers: {
+                        'authorization': this.apiKey,
+                        'content-type': 'application/json'
+                    }
+                }
+            );
+            
+            const { token } = response.data;
+            
+            // 连接到AssemblyAI实时转录WebSocket
+            const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`;
+            this.websocket = new WebSocket(wsUrl);
+            
+            return new Promise((resolve, reject) => {
+                this.websocket.onopen = () => {
+                    logger.info('AssemblyAI流式转录连接建立');
+                    this.isConnected = true;
+                    resolve();
+                };
+                
+                this.websocket.onmessage = (message) => {
+                    this.handleAssemblyAIMessage(message);
+                };
+                
+                this.websocket.onerror = (error) => {
+                    logger.error('AssemblyAI WebSocket错误:', error);
+                    this.isConnected = false;
+                    reject(error);
+                };
+                
+                this.websocket.onclose = () => {
+                    logger.info('AssemblyAI WebSocket连接关闭');
+                    this.isConnected = false;
+                };
+            });
+            
+        } catch (error) {
+            logger.error('AssemblyAI流式转录连接失败:', error);
+            throw error;
+        }
+    }
+    
+    handleAssemblyAIMessage(message) {
+        try {
+            const data = JSON.parse(message.data);
+            
+            // 处理不同类型的消息
+            switch (data.message_type) {
+                case 'SessionBegins':
+                    this.sessionId = data.session_id;
+                    logger.info(`AssemblyAI会话开始: ${this.sessionId}`);
+                    break;
+                    
+                case 'PartialTranscript':
+                    // 部分转录结果（实时显示）
+                    this.broadcastTranscription({
+                        type: 'partial',
+                        text: data.text,
+                        confidence: data.confidence,
+                        timestamp: Date.now()
+                    });
+                    break;
+                    
+                case 'FinalTranscript':
+                    // 最终转录结果
+                    this.broadcastTranscription({
+                        type: 'final',
+                        text: data.text,
+                        confidence: data.confidence,
+                        timestamp: Date.now()
+                    });
+                    break;
+                    
+                case 'SessionTerminated':
+                    logger.info('AssemblyAI会话结束');
+                    break;
+                    
+                default:
+                    logger.debug('未知AssemblyAI消息类型:', data.message_type);
+            }
+            
+        } catch (error) {
+            logger.error('处理AssemblyAI消息失败:', error);
+        }
+    }
+    
+    broadcastTranscription(transcriptionData) {
+        // 广播转录结果给所有连接的客户端
+        this.messageHandlers.forEach((handler, clientId) => {
+            try {
+                handler(transcriptionData);
+            } catch (error) {
+                logger.error(`向客户端 ${clientId} 发送转录结果失败:`, error);
+            }
+        });
+    }
+    
+    addMessageHandler(clientId, handler) {
+        this.messageHandlers.set(clientId, handler);
+    }
+    
+    removeMessageHandler(clientId) {
+        this.messageHandlers.delete(clientId);
+    }
+    
+    sendAudioData(audioData) {
+        if (this.websocket && this.isConnected) {
+            try {
+                // AssemblyAI期望Base64编码的音频数据
+                const base64Audio = Buffer.from(audioData).toString('base64');
+                this.websocket.send(JSON.stringify({
+                    audio_data: base64Audio
+                }));
+            } catch (error) {
+                logger.error('发送音频数据失败:', error);
+            }
+        }
+    }
+    
+    async disconnect() {
+        if (this.websocket) {
+            this.websocket.close();
+            this.websocket = null;
+            this.isConnected = false;
+            this.sessionId = null;
+            this.messageHandlers.clear();
+        }
+    }
+}
+
+// 全局AssemblyAI流式客户端实例
+let assemblyAIStreamingClient = null;
 
 // 错误处理
 app.use((err, req, res, next) => {
