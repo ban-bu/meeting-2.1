@@ -9,6 +9,8 @@ const { RateLimiterMemory } = require('rate-limiter-flexible');
 const fileUpload = require('express-fileupload');
 const fetch = require('node-fetch');
 const path = require('path');
+const axios = require('axios');
+const fs = require('fs-extra');
 require('dotenv').config();
 
 const app = express();
@@ -877,7 +879,7 @@ app.get('/health', (req, res) => {
         environment: process.env.NODE_ENV || 'development',
         version: '1.0.0',
         database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-        transcription_service: process.env.TRANSCRIPTION_SERVICE_URL ? 'local-whisper-configured' : 'not-configured'
+        transcription_service: process.env.ASSEMBLYAI_API_KEY ? 'assemblyai-configured' : 'default-key'
     });
 });
 
@@ -905,46 +907,44 @@ app.get('/api/rooms/:roomId/participants', async (req, res) => {
     }
 });
 
-// 转录服务健康检查端点（代理到本地Python服务）
+// 转录服务健康检查端点（AssemblyAI集成）
 app.get('/api/transcription/health', async (req, res) => {
     try {
-        // 获取转录服务URL
-        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
+        const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
         
-        logger.info(`检查转录服务健康状态: ${transcriptionServiceUrl}/health`);
-        
-        const response = await fetch(`${transcriptionServiceUrl}/health`, {
+        // 测试AssemblyAI连接
+        const testResponse = await axios.get('https://api.assemblyai.com/v2/transcript', {
+            headers: {
+                authorization: assemblyaiApiKey
+            },
             timeout: 10000 // 10秒超时
         });
         
-        if (!response.ok) {
-            throw new Error(`转录服务响应错误: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        // 增强响应数据
-        const enhancedStatus = {
-            ...data,
-            proxy_service: 'node-js',
-            mongodb: isDbConnected ? 'connected' : 'disconnected',
-            node_timestamp: new Date().toISOString()
+        const status = {
+            status: 'ok',
+            service: 'assemblyai-transcription',
+            api_service: 'AssemblyAI',
+            model: 'universal',
+            mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+            api_key_configured: !!assemblyaiApiKey,
+            api_response_status: testResponse.status,
+            timestamp: new Date().toISOString()
         };
         
-        logger.info('转录服务健康检查通过');
-        res.json(enhancedStatus);
+        logger.info('AssemblyAI转录服务健康检查通过');
+        res.json(status);
         
     } catch (error) {
-        logger.error('转录服务健康检查失败: ' + error.message);
+        logger.error('AssemblyAI转录服务健康检查失败: ' + error.message);
         
         // 返回详细的错误信息
         res.status(500).json({ 
             status: 'error',
-            service: 'transcription-proxy',
+            service: 'assemblyai-transcription',
             error: error.message,
-            whisper_model: 'not_available',
-            mongodb: isDbConnected ? 'connected' : 'disconnected',
-            transcription_service_url: process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000',
+            api_service: 'AssemblyAI',
+            mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+            api_key_configured: !!(process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2'),
             timestamp: new Date().toISOString()
         });
     }
@@ -963,51 +963,17 @@ app.post('/api/transcription/audio', async (req, res) => {
         }
         
         const audioFile = req.files.audio_file;
-        logger.info(`收到音频转录请求: ${audioFile.name}, 大小: ${audioFile.size} bytes`);
+        logger.info(`收到AssemblyAI转录请求: ${audioFile.name}, 大小: ${audioFile.size} bytes`);
         
-        // 获取转录服务URL
-        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
-        
-        // 使用form-data库创建FormData
-        const FormData = require('form-data');
-        const formData = new FormData();
-        
-        // 添加文件到FormData
-        formData.append('audio_file', audioFile.data, {
-            filename: audioFile.name,
-            contentType: audioFile.mimetype
-        });
-        
-        // 添加额外参数
-        if (req.body.roomId) {
-            formData.append('roomId', req.body.roomId);
-        }
-        if (req.body.userId) {
-            formData.append('userId', req.body.userId);
-        }
-        
-        logger.info(`代理转录请求到: ${transcriptionServiceUrl}/transcribe/audio`);
-        
-        // 发送到Python转录服务
-        const response = await fetch(`${transcriptionServiceUrl}/transcribe/audio`, {
-            method: 'POST',
-            body: formData,
-            headers: formData.getHeaders(),
-            timeout: 60000 // 60秒超时
-        });
-        
-        if (!response.ok) {
-            throw new Error(`转录服务响应错误: ${response.status} ${response.statusText}`);
-        }
-        
-        const result = await response.json();
+        // 使用AssemblyAI进行转录
+        const transcriptionResult = await transcribeWithAssemblyAI(audioFile);
         
         // 如果转录成功，保存到数据库
-        if (result.success && result.text) {
+        if (transcriptionResult.success && transcriptionResult.text) {
             const transcriptionRecord = {
                 roomId: req.body.roomId || 'unknown',
-                text: result.text,
-                language: result.language || 'zh',
+                text: transcriptionResult.text,
+                language: transcriptionResult.language || 'zh',
                 timestamp: new Date(),
                 type: 'transcription',
                 author: '语音转录',
@@ -1016,35 +982,138 @@ app.post('/api/transcription/audio', async (req, res) => {
                     hour: '2-digit', 
                     minute: '2-digit' 
                 }),
-                model: result.model || 'whisper',
-                confidence: result.confidence || 0.8,
-                processing_time: result.processing_time || 0
+                model: transcriptionResult.model || 'assemblyai-universal',
+                confidence: transcriptionResult.confidence || 0.9,
+                processing_time: transcriptionResult.processing_time || 0
             };
             
             // 保存转录记录
             if (mongoose.connection.readyState === 1) {
                 try {
                     await dataService.saveMessage(transcriptionRecord);
-                    logger.info(`转录记录已保存: ${result.text.substring(0, 50)}... (模型: ${result.model}, 耗时: ${result.processing_time}s)`);
+                    logger.info(`AssemblyAI转录记录已保存: ${transcriptionResult.text.substring(0, 50)}... (耗时: ${transcriptionResult.processing_time}s)`);
                 } catch (dbError) {
                     logger.warn('保存转录记录失败:', dbError.message);
                 }
             }
         }
         
-        res.json(result);
+        res.json(transcriptionResult);
         
     } catch (error) {
-        logger.error('转录代理失败: ' + error.message);
+        logger.error('AssemblyAI转录失败: ' + error.message);
         res.status(500).json({ 
             success: false, 
-            error: '转录服务暂时不可用: ' + error.message,
+            error: 'AssemblyAI转录服务暂时不可用: ' + error.message,
             text: '',
             language: 'zh',
-            service_url: process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000'
+            service: 'assemblyai'
         });
     }
 });
+
+// AssemblyAI转录功能
+async function transcribeWithAssemblyAI(audioFile) {
+    const startTime = Date.now();
+    
+    try {
+        const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
+        const baseUrl = "https://api.assemblyai.com";
+        
+        const headers = {
+            authorization: assemblyaiApiKey,
+        };
+        
+        logger.info('开始上传音频文件到AssemblyAI...');
+        
+        // 1. 上传音频文件
+        const uploadResponse = await axios.post(`${baseUrl}/v2/upload`, audioFile.data, {
+            headers: {
+                ...headers,
+                'Content-Type': 'application/octet-stream'
+            },
+            timeout: 60000 // 60秒超时
+        });
+        
+        const audioUrl = uploadResponse.data.upload_url;
+        logger.info(`音频文件上传成功: ${audioUrl}`);
+        
+        // 2. 提交转录任务
+        const transcriptionData = {
+            audio_url: audioUrl,
+            speech_model: "universal",
+            language_code: "zh", // 中文
+            punctuate: true,
+            format_text: true
+        };
+        
+        const transcriptResponse = await axios.post(`${baseUrl}/v2/transcript`, transcriptionData, {
+            headers: headers,
+            timeout: 30000 // 30秒超时
+        });
+        
+        const transcriptId = transcriptResponse.data.id;
+        logger.info(`转录任务已提交，ID: ${transcriptId}`);
+        
+        // 3. 轮询获取结果
+        const pollingEndpoint = `${baseUrl}/v2/transcript/${transcriptId}`;
+        let attempts = 0;
+        const maxAttempts = 60; // 最多轮询60次（3分钟）
+        
+        while (attempts < maxAttempts) {
+            attempts++;
+            
+            const pollingResponse = await axios.get(pollingEndpoint, {
+                headers: headers,
+                timeout: 10000 // 10秒超时
+            });
+            
+            const transcriptionResult = pollingResponse.data;
+            
+            if (transcriptionResult.status === "completed") {
+                const processingTime = (Date.now() - startTime) / 1000;
+                
+                logger.info(`AssemblyAI转录完成: ${transcriptionResult.text?.substring(0, 100)}...`);
+                
+                return {
+                    success: true,
+                    text: transcriptionResult.text || '',
+                    language: 'zh',
+                    confidence: transcriptionResult.confidence || 0.9,
+                    model: 'assemblyai-universal',
+                    processing_time: processingTime,
+                    service: 'assemblyai',
+                    transcript_id: transcriptId
+                };
+                
+            } else if (transcriptionResult.status === "error") {
+                throw new Error(`AssemblyAI转录失败: ${transcriptionResult.error}`);
+                
+            } else {
+                // 状态为 "queued" 或 "processing"，继续等待
+                logger.info(`转录进行中... 状态: ${transcriptionResult.status} (尝试 ${attempts}/${maxAttempts})`);
+                await new Promise((resolve) => setTimeout(resolve, 3000)); // 等待3秒
+            }
+        }
+        
+        throw new Error('转录超时：超过最大等待时间');
+        
+    } catch (error) {
+        const processingTime = (Date.now() - startTime) / 1000;
+        
+        logger.error('AssemblyAI转录失败:', error.message);
+        
+        return {
+            success: false,
+            text: '',
+            language: 'zh',
+            error: error.message,
+            model: 'assemblyai-universal',
+            processing_time: processingTime,
+            service: 'assemblyai'
+        };
+    }
+}
 
 // 本地Whisper转录服务已移至独立的Python服务
 // 该Node.js服务作为代理，将请求转发到Python转录服务
