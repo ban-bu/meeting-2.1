@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
 const fileUpload = require('express-fileupload');
 const fetch = require('node-fetch');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -102,13 +103,13 @@ app.use(fileUpload({
 }));
 
 // 静态文件服务 - 为Railway部署提供前端文件
-app.use(express.static('./', {
+app.use(express.static(path.join(__dirname, '..'), {
     index: 'index.html',
-    setHeaders: (res, path) => {
+    setHeaders: (res, filePath) => {
         // 设置缓存头
-        if (path.endsWith('.html')) {
+        if (filePath.endsWith('.html')) {
             res.setHeader('Cache-Control', 'no-cache');
-        } else if (path.endsWith('.js') || path.endsWith('.css')) {
+        } else if (filePath.endsWith('.js') || filePath.endsWith('.css')) {
             res.setHeader('Cache-Control', 'public, max-age=86400'); // 1天
         }
     }
@@ -1005,7 +1006,30 @@ app.use((req, res) => {
         res.status(404).json({ error: '接口不存在' });
     } else {
         // 对于非API请求，返回index.html（SPA路由支持）
-        res.sendFile(__dirname + '/../index.html');
+        const indexPath = path.join(__dirname, '..', 'index.html');
+        
+        // 检查文件是否存在
+        const fs = require('fs');
+        if (fs.existsSync(indexPath)) {
+            res.sendFile(indexPath);
+        } else {
+            // 如果文件不存在，返回简单的HTML响应
+            res.status(200).send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Vibe Meeting</title>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                </head>
+                <body>
+                    <h1>Vibe Meeting</h1>
+                    <p>服务器正在运行，但前端文件未找到。</p>
+                    <p>请检查部署配置。</p>
+                </body>
+                </html>
+            `);
+        }
     }
 });
 
@@ -1047,7 +1071,29 @@ setInterval(async () => {
 
 // Railway环境检测和静态文件路由
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/../index.html');
+    const indexPath = path.join(__dirname, '..', 'index.html');
+    const fs = require('fs');
+    
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        // 如果文件不存在，返回简单的HTML响应
+        res.status(200).send(`
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Vibe Meeting</title>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            </head>
+            <body>
+                <h1>Vibe Meeting</h1>
+                <p>服务器正在运行，但前端文件未找到。</p>
+                <p>请检查部署配置。</p>
+            </body>
+            </html>
+        `);
+    }
 });
 
 // 启动服务器
@@ -1055,6 +1101,13 @@ const PORT = process.env.PORT || 3001;
 
 const startServer = async () => {
     await connectDB();
+    
+    // 添加文件路径调试信息
+    const indexPath = path.join(__dirname, '..', 'index.html');
+    const fs = require('fs');
+    logger.info(`📁 项目根目录: ${__dirname}`);
+    logger.info(`📁 index.html路径: ${indexPath}`);
+    logger.info(`📁 index.html存在: ${fs.existsSync(indexPath)}`);
     
     server.listen(PORT, () => {
         logger.info(`🚀 Vibe Meeting 服务器运行在端口 ${PORT}`);
