@@ -6,6 +6,8 @@ const helmet = require('helmet');
 const compression = require('compression');
 const mongoose = require('mongoose');
 const { RateLimiterMemory } = require('rate-limiter-flexible');
+const fileUpload = require('express-fileupload');
+const fetch = require('node-fetch');
 require('dotenv').config();
 
 const app = express();
@@ -91,6 +93,13 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 文件上传中间件
+app.use(fileUpload({
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB限制
+    useTempFiles: true,
+    tempFileDir: '/tmp/'
+}));
 
 // 静态文件服务 - 为Railway部署提供前端文件
 app.use(express.static('./', {
@@ -890,6 +899,79 @@ app.get('/api/rooms/:roomId/participants', async (req, res) => {
     } catch (error) {
         logger.error('获取参与者失败: ' + error.message);
         res.status(500).json({ error: '获取参与者失败' });
+    }
+});
+
+// 转录服务代理端点
+app.get('/api/transcription/health', async (req, res) => {
+    try {
+        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
+        const response = await fetch(`${transcriptionServiceUrl}/health`);
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        logger.error('转录服务健康检查失败: ' + error.message);
+        res.status(500).json({ 
+            error: '转录服务不可用',
+            status: 'error',
+            whisper_model: 'not_available',
+            mongodb: 'unknown',
+            redis: 'unknown'
+        });
+    }
+});
+
+app.post('/api/transcription/audio', async (req, res) => {
+    try {
+        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
+        
+        // 转发请求到Python转录服务
+        const formData = new FormData();
+        if (req.files && req.files.audio_file) {
+            formData.append('audio_file', req.files.audio_file.data, req.files.audio_file.name);
+        }
+        
+        const response = await fetch(`${transcriptionServiceUrl}/transcribe/audio`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        // 如果转录成功，保存到数据库
+        if (result.success && result.text) {
+            const transcriptionRecord = {
+                roomId: req.body.roomId || 'unknown',
+                text: result.text,
+                language: result.language || 'zh',
+                timestamp: new Date(),
+                type: 'upload',
+                userId: req.body.userId || 'anonymous'
+            };
+            
+            // 保存转录记录
+            if (mongoose.connection.readyState === 1) {
+                await new Message({
+                    ...transcriptionRecord,
+                    type: 'transcription',
+                    author: '语音转录',
+                    time: new Date().toLocaleTimeString('zh-CN', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    })
+                }).save();
+            }
+        }
+        
+        res.json(result);
+    } catch (error) {
+        logger.error('转录代理失败: ' + error.message);
+        res.status(500).json({ 
+            success: false, 
+            error: '转录服务暂时不可用',
+            text: '',
+            language: 'zh'
+        });
     }
 });
 

@@ -4743,3 +4743,151 @@ let isSpeakerOn = true;
 let callParticipants = new Set();
 let callStartTime = null;
 let callDuration = null;
+
+// ==================== 转录面板控制函数 ====================
+
+// 显示/隐藏转录面板
+function toggleTranscriptionPanel() {
+    const panel = document.getElementById('transcriptionPanel');
+    const btn = document.getElementById('transcribeBtn');
+    
+    if (panel && btn) {
+        if (panel.style.display === 'none' || !panel.style.display) {
+            panel.style.display = 'flex';
+            btn.classList.add('active');
+            btn.style.background = '#10b981';
+            showToast('转录面板已打开', 'info');
+        } else {
+            panel.style.display = 'none';
+            btn.classList.remove('active');
+            btn.style.background = '';
+            
+            // 如果正在录音，停止录音
+            if (window.transcriptionClient && window.transcriptionClient.isRecording) {
+                window.transcriptionClient.stopRecording();
+            }
+            showToast('转录面板已关闭', 'info');
+        }
+    }
+}
+
+// 关闭转录面板
+function closeTranscription() {
+    const panel = document.getElementById('transcriptionPanel');
+    const btn = document.getElementById('transcribeBtn');
+    
+    if (panel) {
+        panel.style.display = 'none';
+    }
+    
+    if (btn) {
+        btn.classList.remove('active');
+        btn.style.background = '';
+    }
+    
+    // 如果正在录音，停止录音
+    if (window.transcriptionClient && window.transcriptionClient.isRecording) {
+        window.transcriptionClient.stopRecording();
+    }
+    
+    showToast('转录面板已关闭', 'info');
+}
+
+// 测试麦克风功能
+async function testMicrophone() {
+    const btn = document.getElementById('testMicBtn');
+    
+    if (!btn) return;
+    
+    try {
+        // 更新按钮状态
+        btn.classList.add('testing');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.title = '正在测试麦克风...';
+        
+        // 检查浏览器支持
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('浏览器不支持getUserMedia API');
+        }
+        
+        // 尝试获取麦克风权限（不保存流）
+        console.log('正在测试麦克风权限...');
+        const testStream = await navigator.mediaDevices.getUserMedia({ 
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true
+            }
+        });
+        
+        // 立即停止测试流
+        testStream.getTracks().forEach(track => track.stop());
+        
+        console.log('✅ 麦克风权限测试通过');
+        showToast('✅ 麦克风权限测试通过，可以正常使用转录功能', 'success');
+        
+        // 更新按钮状态为成功
+        btn.classList.remove('testing');
+        btn.classList.add('success');
+        btn.innerHTML = '<i class="fas fa-check"></i>';
+        btn.title = '麦克风权限正常';
+        
+        // 3秒后恢复原始状态
+        setTimeout(() => {
+            btn.classList.remove('success');
+            btn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+            btn.title = '测试麦克风';
+        }, 3000);
+        
+    } catch (error) {
+        console.warn('⚠️ 麦克风权限测试失败:', error);
+        
+        let warningMessage = '麦克风权限测试失败';
+        
+        if (error.name === 'NotAllowedError') {
+            warningMessage = '麦克风权限被拒绝，请点击地址栏的麦克风图标并选择"允许"';
+        } else if (error.name === 'NotFoundError') {
+            warningMessage = '未找到麦克风设备，请检查麦克风连接';
+        } else if (error.name === 'NotSupportedError') {
+            warningMessage = '浏览器不支持麦克风功能';
+        } else if (error.name === 'NotReadableError') {
+            warningMessage = '麦克风被其他应用占用，请关闭其他使用麦克风的应用';
+        } else if (error.name === 'OverconstrainedError') {
+            warningMessage = '麦克风配置不兼容，请尝试刷新页面';
+        } else {
+            warningMessage = `麦克风测试失败: ${error.message}`;
+        }
+        
+        showToast(warningMessage, 'error');
+        
+        // 更新按钮状态为失败
+        btn.classList.remove('testing');
+        btn.classList.add('error');
+        btn.innerHTML = '<i class="fas fa-times"></i>';
+        btn.title = '麦克风权限测试失败';
+        
+        // 3秒后恢复原始状态
+        setTimeout(() => {
+            btn.classList.remove('error');
+            btn.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+            btn.title = '测试麦克风';
+        }, 3000);
+    }
+}
+
+// 重新定义toggleTranscription函数，兼容现有HTML按钮
+function toggleTranscription() {
+    // 先显示转录面板（如果未显示）
+    const panel = document.getElementById('transcriptionPanel');
+    if (!panel || panel.style.display === 'none') {
+        toggleTranscriptionPanel();
+        return;
+    }
+    
+    // 如果面板已显示，切换录音状态
+    if (window.transcriptionClient) {
+        window.transcriptionClient.toggleRecording();
+    } else {
+        showToast('转录服务未初始化，请刷新页面', 'error');
+    }
+}

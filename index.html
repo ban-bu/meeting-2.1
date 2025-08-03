@@ -313,9 +313,24 @@
             <button class="transcription-close" onclick="closeTranscription()">&times;</button>
         </div>
         <div class="transcription-content" id="transcriptionContent">
-            <div class="transcription-status">
-                <i class="fas fa-microphone"></i>
-                <span>正在监听...</span>
+            <div class="transcription-status" id="transcriptionStatus">
+                <i class="fas fa-microphone-slash"></i>
+                <span>转录已停止</span>
+            </div>
+            <div class="transcription-controls">
+                <button class="btn-record" id="recordBtn" onclick="toggleTranscription()">
+                    <i class="fas fa-microphone"></i> 开始转录
+                </button>
+                <button class="btn-test-mic" id="testMicBtn" onclick="testMicrophone()" title="测试麦克风">
+                    <i class="fas fa-microphone-slash"></i>
+                </button>
+            </div>
+            <div class="transcription-history" id="transcriptionHistory">
+                <div class="transcription-placeholder">
+                    <i class="fas fa-info-circle"></i>
+                    <p>点击"开始转录"按钮开始语音转录</p>
+                    <p>支持实时转录和会议记录</p>
+                </div>
             </div>
         </div>
     </div>
@@ -369,6 +384,8 @@
 
     <!-- 实时通信客户端 -->
     <script src="realtime-client.js"></script>
+    <!-- AI语音转录客户端 -->
+    <script src="transcription-client.js"></script>
     <!-- 主应用脚本 -->
     <script src="app.js"></script>
 </body>

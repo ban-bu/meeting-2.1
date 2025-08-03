@@ -1,0 +1,17 @@
+[build]
+builder = "nixpacks"
+buildCommand = "pip install -r requirements.txt"
+watchPatterns = ["requirements.txt", "app.py", "**/*.py"]
+
+[deploy]
+startCommand = "python app.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[env]
+PORT = "${{PORT}}"
+WHISPER_MODEL_SIZE = "base"
+MONGODB_URI = "${{MONGODB_URI}}"
+REDIS_URL = "${{REDIS_URL}}"

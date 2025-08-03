@@ -1,8 +1,9 @@
 [build]
 builder = "nixpacks"
+buildCommand = "cd server && npm install"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "cd server && npm start"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
@@ -11,3 +12,5 @@ restartPolicyMaxRetries = 10
 [env]
 NODE_ENV = "production"
 LOG_LEVEL = "error"
+TRANSCRIPTION_SERVICE_URL = "${{RAILWAY_STATIC_URL}}"
+PORT = "${{PORT}}"
