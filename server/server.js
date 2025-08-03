@@ -659,16 +659,34 @@ io.on('connection', (socket) => {
             logger.info(`用户 ${socket.id} 开始流式转录 in room ${roomId}`);
             
             // 初始化AssemblyAI流式客户端（如果还没有）
-            if (!assemblyAIStreamingClient) {
+            if (!assemblyAIStreamingClient || !assemblyAIStreamingClient.isConnected) {
                 const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || 'e6c02e532cc44f7ca1afce8427f69d59';
                 logger.info(`🔑 使用API Key: ${assemblyaiApiKey.substring(0, 8)}...`);
+                
+                // 清理旧客户端
+                if (assemblyAIStreamingClient) {
+                    try {
+                        await assemblyAIStreamingClient.disconnect();
+                    } catch (e) {
+                        logger.warn('清理旧客户端时出错:', e.message);
+                    }
+                }
+                
                 assemblyAIStreamingClient = new AssemblyAIStreamingClient(assemblyaiApiKey);
-                await assemblyAIStreamingClient.connect();
+                
+                try {
+                    await assemblyAIStreamingClient.connect();
+                    logger.info('✅ AssemblyAI客户端连接成功');
+                } catch (connectError) {
+                    logger.error('❌ AssemblyAI连接失败:', connectError.message);
+                    assemblyAIStreamingClient = null;
+                    throw new Error(`AssemblyAI连接失败: ${connectError.message}`);
+                }
             }
             
-            // 验证连接状态
-            if (!assemblyAIStreamingClient.isConnected) {
-                throw new Error('AssemblyAI连接失败');
+            // 再次验证连接状态
+            if (!assemblyAIStreamingClient || !assemblyAIStreamingClient.isConnected) {
+                throw new Error('AssemblyAI客户端未连接，请重新启动转录');
             }
             
             // 为这个客户端添加消息处理器
@@ -1288,18 +1306,37 @@ class AssemblyAIStreamingClient {
                     clearTimeout(timeout);
                     logger.error('❌ AssemblyAI WebSocket错误:', error);
                     logger.error('详细错误信息:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+                    logger.error('错误类型:', typeof error);
+                    logger.error('错误消息:', error.message || 'Unknown error');
                     this.isConnected = false;
-                    reject(error);
+                    
+                    // 确保WebSocket被清理
+                    if (this.websocket) {
+                        try {
+                            this.websocket.close();
+                        } catch (e) {
+                            logger.warn('关闭WebSocket时出错:', e);
+                        }
+                        this.websocket = null;
+                    }
+                    
+                    reject(new Error(`WebSocket连接失败: ${error.message || 'Unknown connection error'}`));
                 };
                 
                 this.websocket.onclose = (event) => {
                     clearTimeout(timeout);
                     logger.info(`🔌 AssemblyAI WebSocket连接关闭: code=${event.code}, reason=${event.reason}`);
                     this.isConnected = false;
+                    this.websocket = null;
                     
-                    // 如果是异常关闭，触发重连
-                    if (event.code !== 1000 && event.code !== 1001) {
+                    // 如果是异常关闭且不是在connect过程中，触发重连警告
+                    if (event.code !== 1000 && event.code !== 1001 && this.isConnected) {
                         logger.warn('🔄 检测到异常关闭，可能需要重连');
+                    }
+                    
+                    // 如果在连接过程中关闭，说明连接失败
+                    if (!this.isConnected) {
+                        reject(new Error(`WebSocket连接被拒绝: code=${event.code}, reason=${event.reason || '未知原因'}`));
                     }
                 };
             });
@@ -1307,6 +1344,25 @@ class AssemblyAIStreamingClient {
         } catch (error) {
             logger.error('AssemblyAI Universal Streaming连接失败:', error);
             throw error;
+        }
+    }
+    
+    async disconnect() {
+        try {
+            if (this.websocket) {
+                logger.info('🔌 断开AssemblyAI连接...');
+                this.isConnected = false;
+                
+                // 发送终止消息
+                if (this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({ type: 'Terminate' }));
+                }
+                
+                this.websocket.close();
+                this.websocket = null;
+            }
+        } catch (error) {
+            logger.error('断开AssemblyAI连接时出错:', error);
         }
     }
     
