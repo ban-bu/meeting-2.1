@@ -296,7 +296,10 @@ class TranscriptionClient {
             
             const result = await response.json();
             
+            console.log('🔍 转录API响应:', result);
+            
             if (result.success && result.text) {
+                console.log('✅ 转录成功，文本:', result.text);
                 // 显示转录结果
                 this.handleTranscriptionResult({
                     type: 'transcription',
@@ -305,7 +308,8 @@ class TranscriptionClient {
                     timestamp: Date.now() / 1000
                 });
             } else {
-                throw new Error('转录返回空结果');
+                console.warn('⚠️ 转录响应格式异常:', result);
+                throw new Error('转录返回空结果或格式错误');
             }
             
         } catch (error) {

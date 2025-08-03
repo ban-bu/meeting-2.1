@@ -1074,8 +1074,9 @@ async function transcribeWithAssemblyAI(audioFile) {
                 const processingTime = (Date.now() - startTime) / 1000;
                 
                 logger.info(`AssemblyAI转录完成: ${transcriptionResult.text?.substring(0, 100)}...`);
+                logger.info(`AssemblyAI完整响应:`, JSON.stringify(transcriptionResult, null, 2));
                 
-                return {
+                const response = {
                     success: true,
                     text: transcriptionResult.text || '',
                     language: 'zh',
@@ -1085,6 +1086,9 @@ async function transcribeWithAssemblyAI(audioFile) {
                     service: 'assemblyai',
                     transcript_id: transcriptId
                 };
+                
+                logger.info(`返回给前端的响应:`, JSON.stringify(response, null, 2));
+                return response;
                 
             } else if (transcriptionResult.status === "error") {
                 throw new Error(`AssemblyAI转录失败: ${transcriptionResult.error}`);
