@@ -877,7 +877,7 @@ app.get('/health', (req, res) => {
         environment: process.env.NODE_ENV || 'development',
         version: '1.0.0',
         database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-        transcription_service: process.env.TRANSCRIPTION_SERVICE_URL ? 'configured' : 'not_configured'
+        transcription_service: process.env.TRANSCRIPTION_SERVICE_URL ? 'local-whisper-configured' : 'not-configured'
     });
 });
 
@@ -905,29 +905,53 @@ app.get('/api/rooms/:roomId/participants', async (req, res) => {
     }
 });
 
-// 转录服务代理端点
+// 转录服务健康检查端点（代理到本地Python服务）
 app.get('/api/transcription/health', async (req, res) => {
     try {
+        // 获取转录服务URL
         const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
-        const response = await fetch(`${transcriptionServiceUrl}/health`);
+        
+        logger.info(`检查转录服务健康状态: ${transcriptionServiceUrl}/health`);
+        
+        const response = await fetch(`${transcriptionServiceUrl}/health`, {
+            timeout: 10000 // 10秒超时
+        });
+        
+        if (!response.ok) {
+            throw new Error(`转录服务响应错误: ${response.status}`);
+        }
+        
         const data = await response.json();
-        res.json(data);
+        
+        // 增强响应数据
+        const enhancedStatus = {
+            ...data,
+            proxy_service: 'node-js',
+            mongodb: isDbConnected ? 'connected' : 'disconnected',
+            node_timestamp: new Date().toISOString()
+        };
+        
+        logger.info('转录服务健康检查通过');
+        res.json(enhancedStatus);
+        
     } catch (error) {
         logger.error('转录服务健康检查失败: ' + error.message);
+        
+        // 返回详细的错误信息
         res.status(500).json({ 
-            error: '转录服务不可用',
             status: 'error',
+            service: 'transcription-proxy',
+            error: error.message,
             whisper_model: 'not_available',
-            mongodb: 'unknown',
-            redis: 'unknown'
+            mongodb: isDbConnected ? 'connected' : 'disconnected',
+            transcription_service_url: process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000',
+            timestamp: new Date().toISOString()
         });
     }
 });
 
 app.post('/api/transcription/audio', async (req, res) => {
     try {
-        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
-        
         // 检查是否有上传的文件
         if (!req.files || !req.files.audio_file) {
             return res.status(400).json({ 
@@ -938,24 +962,42 @@ app.post('/api/transcription/audio', async (req, res) => {
             });
         }
         
+        const audioFile = req.files.audio_file;
+        logger.info(`收到音频转录请求: ${audioFile.name}, 大小: ${audioFile.size} bytes`);
+        
+        // 获取转录服务URL
+        const transcriptionServiceUrl = process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000';
+        
         // 使用form-data库创建FormData
         const FormData = require('form-data');
         const formData = new FormData();
         
         // 添加文件到FormData
-        formData.append('audio_file', req.files.audio_file.data, {
-            filename: req.files.audio_file.name,
-            contentType: req.files.audio_file.mimetype
+        formData.append('audio_file', audioFile.data, {
+            filename: audioFile.name,
+            contentType: audioFile.mimetype
         });
         
+        // 添加额外参数
+        if (req.body.roomId) {
+            formData.append('roomId', req.body.roomId);
+        }
+        if (req.body.userId) {
+            formData.append('userId', req.body.userId);
+        }
+        
+        logger.info(`代理转录请求到: ${transcriptionServiceUrl}/transcribe/audio`);
+        
+        // 发送到Python转录服务
         const response = await fetch(`${transcriptionServiceUrl}/transcribe/audio`, {
             method: 'POST',
             body: formData,
-            headers: formData.getHeaders()
+            headers: formData.getHeaders(),
+            timeout: 60000 // 60秒超时
         });
         
         if (!response.ok) {
-            throw new Error(`转录服务响应错误: ${response.status}`);
+            throw new Error(`转录服务响应错误: ${response.status} ${response.statusText}`);
         }
         
         const result = await response.json();
@@ -973,26 +1015,39 @@ app.post('/api/transcription/audio', async (req, res) => {
                 time: new Date().toLocaleTimeString('zh-CN', { 
                     hour: '2-digit', 
                     minute: '2-digit' 
-                })
+                }),
+                model: result.model || 'whisper',
+                confidence: result.confidence || 0.8,
+                processing_time: result.processing_time || 0
             };
             
             // 保存转录记录
             if (mongoose.connection.readyState === 1) {
-                await dataService.saveMessage(transcriptionRecord);
+                try {
+                    await dataService.saveMessage(transcriptionRecord);
+                    logger.info(`转录记录已保存: ${result.text.substring(0, 50)}... (模型: ${result.model}, 耗时: ${result.processing_time}s)`);
+                } catch (dbError) {
+                    logger.warn('保存转录记录失败:', dbError.message);
+                }
             }
         }
         
         res.json(result);
+        
     } catch (error) {
         logger.error('转录代理失败: ' + error.message);
         res.status(500).json({ 
             success: false, 
             error: '转录服务暂时不可用: ' + error.message,
             text: '',
-            language: 'zh'
+            language: 'zh',
+            service_url: process.env.TRANSCRIPTION_SERVICE_URL || 'http://localhost:8000'
         });
     }
 });
+
+// 本地Whisper转录服务已移至独立的Python服务
+// 该Node.js服务作为代理，将请求转发到Python转录服务
 
 // 错误处理
 app.use((err, req, res, next) => {

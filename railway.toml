@@ -1,5 +1,6 @@
 [build]
 builder = "nixpacks"
+buildCommand = "cd server && npm install"
 
 [deploy]
 startCommand = "node server/server.js"
@@ -11,5 +12,5 @@ restartPolicyMaxRetries = 10
 [env]
 NODE_ENV = "production"
 LOG_LEVEL = "error"
-TRANSCRIPTION_SERVICE_URL = "${{RAILWAY_STATIC_URL}}"
 PORT = "${{PORT}}"
+TRANSCRIPTION_SERVICE_URL = "${{TRANSCRIPTION_SERVICE_URL}}"
