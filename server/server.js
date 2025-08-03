@@ -1223,13 +1223,9 @@ class AssemblyAIStreamingClient {
     
     async connect() {
         try {
-            // 使用Universal Streaming API直接连接WebSocket
-            const wsUrl = `wss://streaming.assemblyai.com/v2/stream?sample_rate=16000&encoding=pcm_s16le&format_turns=true`;
-            this.websocket = new WebSocket(wsUrl, [], {
-                headers: {
-                    'authorization': this.apiKey
-                }
-            });
+            // 使用Universal Streaming API直接连接WebSocket - 通过URL参数传递token
+            const wsUrl = `wss://streaming.assemblyai.com/v2/stream?sample_rate=16000&encoding=pcm_s16le&format_turns=true&token=${this.apiKey}`;
+            this.websocket = new WebSocket(wsUrl);
             
             return new Promise((resolve, reject) => {
                 this.websocket.onopen = () => {
