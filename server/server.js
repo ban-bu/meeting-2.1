@@ -1448,10 +1448,9 @@ class AssemblyAIStreamingClient {
                     buffer = Buffer.from(audioData);
                 }
                 
-                // Universal Streaming v3 API期望原始PCM16数据的Base64编码
-                const base64Audio = buffer.toString('base64');
-                logger.debug(`🎵 发送音频数据到AssemblyAI: buffer=${buffer.length} bytes, base64=${base64Audio.length} chars`);
-                this.websocket.send(base64Audio);
+                // Universal Streaming v3 API期望原始的二进制PCM16数据（不是base64）
+                logger.debug(`🎵 发送音频数据到AssemblyAI: ${buffer.length} bytes (binary)`);
+                this.websocket.send(buffer);
             } catch (error) {
                 logger.error('发送音频数据失败:', error);
                 logger.error('音频数据类型:', typeof audioData, audioData?.constructor?.name);
