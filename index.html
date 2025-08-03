@@ -388,5 +388,18 @@
     <script src="transcription-client.js"></script>
     <!-- 主应用脚本 -->
     <script src="app.js"></script>
+    
+    <script>
+        // 初始化转录客户端
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (typeof TranscriptionClient !== 'undefined') {
+                window.transcriptionClient = new TranscriptionClient();
+                await window.transcriptionClient.init();
+                console.log('🎤 转录客户端已准备就绪');
+            } else {
+                console.warn('⚠️ TranscriptionClient 未找到');
+            }
+        });
+    </script>
 </body>
 </html>

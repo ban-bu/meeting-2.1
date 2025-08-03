@@ -30,24 +30,34 @@ class TranscriptionClient {
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             return 'http://localhost:8000';
         } else if (hostname.includes('railway.app')) {
-            // Railway环境 - 假设转录服务部署在不同端口或子域名
-            return `${protocol}//${hostname.replace('app', 'transcription')}`;
+            // Railway环境 - 通过Node.js服务代理转录请求
+            return `${protocol}//${hostname}/api/transcription`;
         } else {
             // 从localStorage获取配置的转录服务地址
-            return localStorage.getItem('transcription_service_url') || `${protocol}//${hostname}:8000`;
+            return localStorage.getItem('transcription_service_url') || `${protocol}//${hostname}/api/transcription`;
         }
     }
     
     async init() {
         try {
+            console.log('🎤 初始化语音转录客户端');
+            console.log('🔗 转录服务URL:', this.transcriptionServiceUrl);
+            
             // 检查浏览器支持
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 console.warn('浏览器不支持录音功能');
+                this.showToast('浏览器不支持录音功能', 'error');
                 return;
             }
             
+            // 检查麦克风权限
+            await this.checkMicrophonePermission();
+            
             // 测试转录服务连接
-            await this.testConnection();
+            const connected = await this.testConnection();
+            if (!connected) {
+                console.warn('⚠️ 转录服务连接失败，将使用降级模式');
+            }
             
             console.log('✅ 语音转录客户端初始化完成');
         } catch (error) {
@@ -55,9 +65,31 @@ class TranscriptionClient {
         }
     }
     
+    async checkMicrophonePermission() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('✅ 麦克风权限已获取');
+            stream.getTracks().forEach(track => track.stop());
+            return true;
+        } catch (error) {
+            console.error('❌ 麦克风权限获取失败:', error);
+            this.showToast('需要麦克风权限才能使用语音转录', 'warning');
+            return false;
+        }
+    }
+    
     async testConnection() {
         try {
-            const response = await fetch(`${this.transcriptionServiceUrl}/health`);
+            // 根据URL结构调整健康检查路径
+            let healthUrl;
+            if (this.transcriptionServiceUrl.includes('/api/transcription')) {
+                healthUrl = `${this.transcriptionServiceUrl}/health`;
+            } else {
+                healthUrl = `${this.transcriptionServiceUrl}/health`;
+            }
+            
+            console.log('🔍 测试转录服务连接:', healthUrl);
+            const response = await fetch(healthUrl);
             const data = await response.json();
             
             if (data.status === 'ok') {
@@ -69,6 +101,7 @@ class TranscriptionClient {
             }
         } catch (error) {
             console.warn('⚠️ 转录服务连接失败:', error);
+            console.warn('将使用降级模式（本地语音识别）');
             this.isConnected = false;
             return false;
         }
@@ -171,13 +204,20 @@ class TranscriptionClient {
     
     async connectWebSocket(roomId) {
         try {
+            // 暂时禁用WebSocket功能，因为Railway代理不支持WebSocket转发
+            console.log('ℹ️ WebSocket转录暂时禁用，使用HTTP轮询模式');
+            return;
+            
+            /* 
             const wsUrl = this.transcriptionServiceUrl.replace('http', 'ws') + `/ws/transcribe/${roomId}`;
             this.websocket = new WebSocket(wsUrl);
             
             this.websocket.onopen = () => {
                 console.log('✅ 转录WebSocket连接建立');
             };
+            */
             
+            /*
             this.websocket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 this.handleTranscriptionResult(data);
@@ -190,6 +230,7 @@ class TranscriptionClient {
             this.websocket.onclose = () => {
                 console.log('转录WebSocket连接关闭');
             };
+            */
             
         } catch (error) {
             console.error('WebSocket连接失败:', error);
@@ -225,8 +266,26 @@ class TranscriptionClient {
             const formData = new FormData();
             formData.append('audio_file', audioBlob, 'recording.webm');
             
+            // 添加房间ID和用户ID
+            if (this.currentRoomId) {
+                formData.append('roomId', this.currentRoomId);
+            }
+            if (typeof currentUserId !== 'undefined') {
+                formData.append('userId', currentUserId);
+            }
+            
+            // 确定转录请求URL
+            let transcribeUrl;
+            if (this.transcriptionServiceUrl.includes('/api/transcription')) {
+                transcribeUrl = `${this.transcriptionServiceUrl}/audio`;
+            } else {
+                transcribeUrl = `${this.transcriptionServiceUrl}/transcribe/audio`;
+            }
+            
+            console.log('📤 发送转录请求到:', transcribeUrl);
+            
             // 发送转录请求
-            const response = await fetch(`${this.transcriptionServiceUrl}/transcribe/audio`, {
+            const response = await fetch(transcribeUrl, {
                 method: 'POST',
                 body: formData
             });
@@ -251,7 +310,63 @@ class TranscriptionClient {
             
         } catch (error) {
             console.error('转录失败:', error);
-            this.showToast('语音转录失败: ' + error.message, 'error');
+            this.showToast('云端转录失败，尝试本地识别...', 'warning');
+            
+            // 降级到本地语音识别
+            await this.fallbackToLocalRecognition(audioBlob);
+        }
+    }
+    
+    // 降级本地语音识别
+    async fallbackToLocalRecognition(audioBlob) {
+        try {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                throw new Error('浏览器不支持语音识别');
+            }
+            
+            this.showToast('使用浏览器本地语音识别...', 'info');
+            
+            // 使用Web Speech API
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recognition = new SpeechRecognition();
+            
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'zh-CN';
+            
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                const confidence = event.results[0][0].confidence;
+                
+                this.handleTranscriptionResult({
+                    type: 'transcription',
+                    text: transcript,
+                    language: 'zh-CN',
+                    timestamp: Date.now() / 1000,
+                    source: 'local',
+                    confidence: confidence
+                });
+                
+                this.showToast('本地转录完成', 'success');
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('本地语音识别失败:', event.error);
+                this.showToast('语音识别不可用: ' + event.error, 'error');
+            };
+            
+            recognition.onend = () => {
+                console.log('本地语音识别结束');
+            };
+            
+            // 注意：Web Speech API无法直接处理音频文件
+            // 这里只是提供一个框架，实际需要实时录音
+            console.log('ℹ️ 本地识别需要重新录音');
+            this.showToast('请重新开始录音以使用本地识别', 'info');
+            
+        } catch (error) {
+            console.error('本地语音识别失败:', error);
+            this.showToast('语音识别功能不可用: ' + error.message, 'error');
         }
     }
     
