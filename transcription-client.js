@@ -561,11 +561,16 @@ Object.assign(TranscriptionClient.prototype, {
     
     sendAudioData(pcmData) {
         if (!window.realtimeClient || !window.realtimeClient.socket) {
+            console.warn('⚠️ Socket.IO客户端未连接，无法发送音频数据');
             return;
         }
         
         const socket = window.realtimeClient.socket;
-        socket.emit('audioData', { audioData: pcmData });
+        console.log('📤 发送音频数据:', pcmData.byteLength, 'bytes');
+        
+        // 将ArrayBuffer转换为Array以便Socket.IO传输
+        const audioArray = Array.from(new Uint8Array(pcmData));
+        socket.emit('audioData', { audioData: audioArray });
     },
     
     convertToPCM16(float32Array) {
@@ -581,17 +586,33 @@ Object.assign(TranscriptionClient.prototype, {
     },
     
     handleStreamingTranscriptionResult(data) {
-        const { type, text, confidence, timestamp } = data;
+        console.log('📝 处理转录结果:', data);
+        
+        let text, isFinal, confidence, timestamp;
+        
+        // 处理Universal-Streaming格式
+        if (data.type === 'Turn') {
+            text = data.transcript || '';
+            isFinal = data.end_of_turn || false;
+            confidence = data.end_of_turn_confidence;
+            timestamp = Date.now();
+        } else {
+            // 兼容旧格式
+            text = data.text || data.transcript || '';
+            isFinal = data.type === 'final' || data.isFinal;
+            confidence = data.confidence;
+            timestamp = data.timestamp;
+        }
         
         if (!text || text.trim() === '') {
             return;
         }
         
-        console.log(`📝 ${type === 'partial' ? '部分' : '最终'}转录结果:`, text);
+        console.log(`📝 ${isFinal ? '最终' : '部分'}转录结果:`, text);
         
-        if (type === 'partial') {
+        if (!isFinal) {
             this.updatePartialTranscription(text);
-        } else if (type === 'final') {
+        } else {
             this.addFinalTranscription(text, confidence, timestamp);
         }
     },
@@ -715,6 +736,15 @@ Object.assign(TranscriptionClient.prototype, {
                 if (this.isRecording) {
                     const inputData = event.inputBuffer.getChannelData(0);
                     const pcmData = this.convertToPCM16(inputData);
+                    
+                    // 添加调试日志
+                    console.log('🎵 处理音频数据:', {
+                        inputDataLength: inputData.length,
+                        pcmDataLength: pcmData.byteLength,
+                        isRecording: this.isRecording,
+                        socketConnected: !!(window.realtimeClient && window.realtimeClient.socket)
+                    });
+                    
                     this.sendAudioData(pcmData);
                 }
             };

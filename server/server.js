@@ -27,7 +27,7 @@ const rateLimiter = new RateLimiterMemory({
 
 // 日志控制 - 减少不必要的日志输出
 const isProduction = process.env.NODE_ENV === 'production';
-const logLevel = process.env.LOG_LEVEL || 'info';
+const logLevel = process.env.LOG_LEVEL || 'debug'; // 临时设置为debug以便调试
 
 const logger = {
     info: (message) => {
@@ -667,6 +667,8 @@ io.on('connection', (socket) => {
             
             // 为这个客户端添加消息处理器
             assemblyAIStreamingClient.addMessageHandler(socket.id, (transcriptionData) => {
+                logger.debug(`📤 发送转录结果给客户端 ${socket.id}:`, transcriptionData);
+                
                 // 发送转录结果给客户端
                 socket.emit('streamingTranscriptionResult', {
                     ...transcriptionData,
@@ -674,13 +676,13 @@ io.on('connection', (socket) => {
                     userId: socket.userId || socket.id
                 });
                 
-                // 如果是最终结果，也发送给房间内的其他用户
-                if (transcriptionData.type === 'final') {
+                // 如果是Turn类型且end_of_turn为true，也发送给房间内的其他用户
+                if (transcriptionData.type === 'Turn' && transcriptionData.end_of_turn) {
                     socket.to(roomId).emit('transcriptionReceived', {
-                        text: transcriptionData.text,
+                        text: transcriptionData.transcript,
                         author: '语音转录',
                         userId: socket.userId || socket.id,
-                        timestamp: transcriptionData.timestamp,
+                        timestamp: Date.now(),
                         isStreaming: true
                     });
                 }
@@ -700,8 +702,13 @@ io.on('connection', (socket) => {
     socket.on('audioData', (data) => {
         try {
             if (assemblyAIStreamingClient && assemblyAIStreamingClient.isConnected) {
+                // 添加音频数据接收日志
+                logger.debug(`📊 收到音频数据: ${data.audioData ? data.audioData.length : 0} bytes from ${socket.id}`);
+                
                 // 将音频数据发送给AssemblyAI
                 assemblyAIStreamingClient.sendAudioData(data.audioData);
+            } else {
+                logger.warn(`⚠️ AssemblyAI客户端未连接，无法发送音频数据 from ${socket.id}`);
             }
         } catch (error) {
             logger.error('处理音频数据失败:', error);
@@ -1249,8 +1256,8 @@ class AssemblyAIStreamingClient {
                     reject(error);
                 };
                 
-                this.websocket.onclose = () => {
-                    logger.info('AssemblyAI WebSocket连接关闭');
+                this.websocket.onclose = (event) => {
+                    logger.info(`AssemblyAI WebSocket连接关闭: code=${event.code}, reason=${event.reason}`);
                     this.isConnected = false;
                 };
             });
@@ -1325,12 +1332,34 @@ class AssemblyAIStreamingClient {
     sendAudioData(audioData) {
         if (this.websocket && this.isConnected) {
             try {
-                // Universal Streaming API期望直接发送Base64编码的音频数据
-                const base64Audio = Buffer.from(audioData).toString('base64');
+                // 确保audioData是Buffer或ArrayBuffer  
+                let buffer;
+                if (audioData instanceof ArrayBuffer) {
+                    buffer = Buffer.from(audioData);
+                } else if (Buffer.isBuffer(audioData)) {
+                    buffer = audioData;
+                } else if (Array.isArray(audioData)) {
+                    // 如果是数组（从前端ArrayBuffer转换而来），转换为Buffer
+                    buffer = Buffer.from(audioData);
+                } else if (typeof audioData === 'object' && audioData.constructor === Object) {
+                    // 如果是Socket.IO传递的普通对象，需要特殊处理
+                    logger.warn('收到的音频数据是普通对象，尝试转换:', Object.keys(audioData));
+                    return; // 暂时跳过，需要前端修复
+                } else {
+                    // 如果是其他格式，尝试转换
+                    buffer = Buffer.from(audioData);
+                }
+                
+                // Universal Streaming v3 API期望原始PCM16数据的Base64编码
+                const base64Audio = buffer.toString('base64');
+                logger.debug(`🎵 发送音频数据到AssemblyAI: buffer=${buffer.length} bytes, base64=${base64Audio.length} chars`);
                 this.websocket.send(base64Audio);
             } catch (error) {
                 logger.error('发送音频数据失败:', error);
+                logger.error('音频数据类型:', typeof audioData, audioData?.constructor?.name);
             }
+        } else {
+            logger.warn('⚠️ WebSocket未连接，无法发送音频数据');
         }
     }
     
