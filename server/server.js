@@ -1223,9 +1223,13 @@ class AssemblyAIStreamingClient {
     
     async connect() {
         try {
-            // 使用Universal Streaming API直接连接WebSocket - 通过URL参数传递token
-            const wsUrl = `wss://streaming.assemblyai.com/v2/stream?sample_rate=16000&encoding=pcm_s16le&format_turns=true&token=${this.apiKey}`;
-            this.websocket = new WebSocket(wsUrl);
+            // 使用Universal Streaming v3 API - 最新版本
+            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&format_turns=true`;
+            this.websocket = new WebSocket(wsUrl, [], {
+                headers: {
+                    'Authorization': this.apiKey
+                }
+            });
             
             return new Promise((resolve, reject) => {
                 this.websocket.onopen = () => {
@@ -1240,6 +1244,7 @@ class AssemblyAIStreamingClient {
                 
                 this.websocket.onerror = (error) => {
                     logger.error('AssemblyAI WebSocket错误:', error);
+                    logger.error('详细错误信息:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
                     this.isConnected = false;
                     reject(error);
                 };
