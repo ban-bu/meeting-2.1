@@ -660,7 +660,7 @@ io.on('connection', (socket) => {
             
             // 初始化AssemblyAI流式客户端（如果还没有）
             if (!assemblyAIStreamingClient) {
-                const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
+                const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || 'e6c02e532cc44f7ca1afce8427f69d59';
                 assemblyAIStreamingClient = new AssemblyAIStreamingClient(assemblyaiApiKey);
                 await assemblyAIStreamingClient.connect();
             }
@@ -1002,7 +1002,7 @@ app.get('/api/rooms/:roomId/participants', async (req, res) => {
 // 转录服务健康检查端点（AssemblyAI集成）
 app.get('/api/transcription/health', async (req, res) => {
     try {
-        const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
+                    const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || 'e6c02e532cc44f7ca1afce8427f69d59';
         
         // 测试AssemblyAI连接
         const testResponse = await axios.get('https://api.assemblyai.com/v2/transcript', {
@@ -1036,7 +1036,7 @@ app.get('/api/transcription/health', async (req, res) => {
             error: error.message,
             api_service: 'AssemblyAI',
             mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-            api_key_configured: !!(process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2'),
+            api_key_configured: !!(process.env.ASSEMBLYAI_API_KEY || 'e6c02e532cc44f7ca1afce8427f69d59'),
             timestamp: new Date().toISOString()
         });
     }
@@ -1109,7 +1109,7 @@ async function transcribeWithAssemblyAI(audioFile) {
     const startTime = Date.now();
     
     try {
-        const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || '9a9bc1cad7b24932a96d7e55469436f2';
+                    const assemblyaiApiKey = process.env.ASSEMBLYAI_API_KEY || 'e6c02e532cc44f7ca1afce8427f69d59';
         const baseUrl = "https://api.assemblyai.com";
         
         const headers = {
