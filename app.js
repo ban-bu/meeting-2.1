@@ -19,6 +19,7 @@ let participants = [];
 let isAIProcessing = false;
 let currentUsername = '';
 let roomId = '';
+window.roomId = roomId; // 暴露到全局
 let currentUserId = '';
 
 // 基于用户名生成一致的用户ID
@@ -701,6 +702,7 @@ function init() {
     const urlRoomId = urlParams.get('room');
     if (urlRoomId) {
         roomId = urlRoomId;
+        window.roomId = roomId;
         document.getElementById('roomId').textContent = `房间: ${roomId}`;
     }
     
@@ -2285,15 +2287,17 @@ function setUsername() {
     }
     
     // 处理房间号
-    if (customRoomId) {
-        roomId = customRoomId;
-        // 更新URL
-        const newUrl = window.location.pathname + '?room=' + roomId;
-        window.history.replaceState({path: newUrl}, '', newUrl);
-        document.getElementById('roomId').textContent = `房间: ${roomId}`;
+            if (customRoomId) {
+            roomId = customRoomId;
+            window.roomId = roomId;
+            // 更新URL
+            const newUrl = window.location.pathname + '?room=' + roomId;
+            window.history.replaceState({path: newUrl}, '', newUrl);
+            document.getElementById('roomId').textContent = `房间: ${roomId}`;
     } else if (!roomId) {
         // 如果没有自定义房间号且roomId未设置，生成新的
         roomId = 'meeting-' + Math.random().toString(36).substr(2, 6);
+        window.roomId = roomId;
         const newUrl = window.location.pathname + '?room=' + roomId;
         window.history.replaceState({path: newUrl}, '', newUrl);
         document.getElementById('roomId').textContent = `房间: ${roomId}`;
@@ -2386,6 +2390,7 @@ function createNewRoom() {
     
     // 强制重置房间ID，创建全新的房间
     roomId = 'meeting-' + Math.random().toString(36).substr(2, 6);
+    window.roomId = roomId;
     const newUrl = window.location.pathname + '?room=' + roomId;
     window.history.replaceState({path: newUrl}, '', newUrl);
     document.getElementById('roomId').textContent = `房间: ${roomId}`;

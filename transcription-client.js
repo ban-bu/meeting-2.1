@@ -60,6 +60,9 @@ class TranscriptionClient {
             // 设置Socket.IO事件监听
             this.setupSocketListeners();
             
+            // 初始化房间ID
+            this.currentRoomId = this.getCurrentRoomId();
+            
             // 测试转录服务连接
             const connected = await this.testConnection();
             if (!connected) {
@@ -778,9 +781,55 @@ TranscriptionClient.prototype.toggleRecording = function() {
         if (this.isRecording) {
             this.stopStreamingMode();
         } else {
-            this.startStreamingMode(this.currentRoomId || currentRoomId);
+            // 获取当前房间ID
+            const roomId = this.getCurrentRoomId();
+            if (!roomId) {
+                console.error('无法获取房间ID，无法启动转录');
+                this.showToast('请先加入房间再开始转录', 'error');
+                return;
+            }
+            this.startStreamingMode(roomId);
         }
     } else {
         return originalToggleRecording.call(this);
     }
 };
+
+// 添加获取当前房间ID的方法
+Object.assign(TranscriptionClient.prototype, {
+    getCurrentRoomId() {
+        // 优先使用内部存储的roomId
+        if (this.currentRoomId) {
+            return this.currentRoomId;
+        }
+        
+        // 从全局变量获取roomId
+        if (typeof window !== 'undefined' && window.roomId) {
+            return window.roomId;
+        }
+        
+        // 从URL参数获取
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlRoomId = urlParams.get('room');
+        if (urlRoomId) {
+            return urlRoomId;
+        }
+        
+        // 从DOM元素获取
+        const roomIdElement = document.getElementById('roomId');
+        if (roomIdElement) {
+            const textContent = roomIdElement.textContent || roomIdElement.innerText;
+            const match = textContent.match(/房间: (.+)/);
+            if (match) {
+                return match[1];
+            }
+        }
+        
+        // 从realtime client获取
+        if (window.realtimeClient && window.realtimeClient.currentRoomId) {
+            return window.realtimeClient.currentRoomId;
+        }
+        
+        return null;
+    }
+});
