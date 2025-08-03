@@ -1211,7 +1211,7 @@ async function transcribeWithAssemblyAI(audioFile) {
     }
 }
 
-// AssemblyAI流式转录WebSocket处理类
+// AssemblyAI Universal Streaming WebSocket处理类
 class AssemblyAIStreamingClient {
     constructor(assemblyaiApiKey) {
         this.apiKey = assemblyaiApiKey;
@@ -1223,26 +1223,17 @@ class AssemblyAIStreamingClient {
     
     async connect() {
         try {
-            // 创建临时会话以获取流式转录token
-            const response = await axios.post('https://api.assemblyai.com/v2/realtime/token', 
-                { expires_in: 3600 }, // 1小时有效期
-                {
-                    headers: {
-                        'authorization': this.apiKey,
-                        'content-type': 'application/json'
-                    }
+            // 使用Universal Streaming API直接连接WebSocket
+            const wsUrl = `wss://streaming.assemblyai.com/v2/stream?sample_rate=16000&encoding=pcm_s16le&format_turns=true`;
+            this.websocket = new WebSocket(wsUrl, [], {
+                headers: {
+                    'authorization': this.apiKey
                 }
-            );
-            
-            const { token } = response.data;
-            
-            // 连接到AssemblyAI实时转录WebSocket
-            const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`;
-            this.websocket = new WebSocket(wsUrl);
+            });
             
             return new Promise((resolve, reject) => {
                 this.websocket.onopen = () => {
-                    logger.info('AssemblyAI流式转录连接建立');
+                    logger.info('AssemblyAI Universal Streaming连接建立');
                     this.isConnected = true;
                     resolve();
                 };
@@ -1264,7 +1255,7 @@ class AssemblyAIStreamingClient {
             });
             
         } catch (error) {
-            logger.error('AssemblyAI流式转录连接失败:', error);
+            logger.error('AssemblyAI Universal Streaming连接失败:', error);
             throw error;
         }
     }
@@ -1273,39 +1264,37 @@ class AssemblyAIStreamingClient {
         try {
             const data = JSON.parse(message.data);
             
-            // 处理不同类型的消息
-            switch (data.message_type) {
-                case 'SessionBegins':
-                    this.sessionId = data.session_id;
-                    logger.info(`AssemblyAI会话开始: ${this.sessionId}`);
+            // 处理不同类型的消息 - Universal Streaming API格式
+            switch (data.type) {
+                case 'Begin':
+                    this.sessionId = data.id;
+                    logger.info(`AssemblyAI Universal Streaming会话开始: ${this.sessionId}`);
                     break;
                     
-                case 'PartialTranscript':
-                    // 部分转录结果（实时显示）
-                    this.broadcastTranscription({
-                        type: 'partial',
-                        text: data.text,
-                        confidence: data.confidence,
-                        timestamp: Date.now()
-                    });
+                case 'Turn':
+                    // Universal Streaming API的转录结果
+                    if (data.transcript && data.transcript.trim()) {
+                        const resultType = data.end_of_turn ? 'final' : 'partial';
+                        
+                        this.broadcastTranscription({
+                            type: resultType,
+                            text: data.transcript,
+                            confidence: data.end_of_turn_confidence || 0.9,
+                            timestamp: Date.now(),
+                            turn_order: data.turn_order,
+                            end_of_turn: data.end_of_turn,
+                            turn_is_formatted: data.turn_is_formatted
+                        });
+                    }
                     break;
                     
-                case 'FinalTranscript':
-                    // 最终转录结果
-                    this.broadcastTranscription({
-                        type: 'final',
-                        text: data.text,
-                        confidence: data.confidence,
-                        timestamp: Date.now()
-                    });
-                    break;
-                    
-                case 'SessionTerminated':
-                    logger.info('AssemblyAI会话结束');
+                case 'Termination':
+                    logger.info(`AssemblyAI Universal Streaming会话结束，处理了 ${data.audio_duration_seconds} 秒音频`);
+                    this.isConnected = false;
                     break;
                     
                 default:
-                    logger.debug('未知AssemblyAI消息类型:', data.message_type);
+                    logger.debug('未知AssemblyAI消息类型:', data.type);
             }
             
         } catch (error) {
@@ -1335,24 +1324,43 @@ class AssemblyAIStreamingClient {
     sendAudioData(audioData) {
         if (this.websocket && this.isConnected) {
             try {
-                // AssemblyAI期望Base64编码的音频数据
+                // Universal Streaming API期望直接发送Base64编码的音频数据
                 const base64Audio = Buffer.from(audioData).toString('base64');
-                this.websocket.send(JSON.stringify({
-                    audio_data: base64Audio
-                }));
+                this.websocket.send(base64Audio);
             } catch (error) {
                 logger.error('发送音频数据失败:', error);
             }
         }
     }
     
+    terminate() {
+        if (this.websocket && this.isConnected) {
+            try {
+                // 发送终止会话消息
+                this.websocket.send(JSON.stringify({
+                    type: 'Terminate'
+                }));
+            } catch (error) {
+                logger.error('发送终止消息失败:', error);
+            }
+        }
+    }
+    
     async disconnect() {
         if (this.websocket) {
-            this.websocket.close();
-            this.websocket = null;
-            this.isConnected = false;
-            this.sessionId = null;
-            this.messageHandlers.clear();
+            // 先尝试优雅关闭
+            this.terminate();
+            
+            // 等待一小段时间让终止消息发送
+            setTimeout(() => {
+                if (this.websocket) {
+                    this.websocket.close();
+                    this.websocket = null;
+                    this.isConnected = false;
+                    this.sessionId = null;
+                    this.messageHandlers.clear();
+                }
+            }, 100);
         }
     }
 }
