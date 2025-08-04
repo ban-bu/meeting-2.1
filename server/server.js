@@ -1104,7 +1104,7 @@ app.post('/api/transcription/audio', async (req, res) => {
                 success: false, 
                 error: '未找到音频文件',
                 text: '',
-                language: 'zh'
+                language: 'zh_cn'
             });
         }
         
@@ -1119,7 +1119,7 @@ app.post('/api/transcription/audio', async (req, res) => {
             const transcriptionRecord = {
                 roomId: req.body.roomId || 'unknown',
                 text: transcriptionResult.text,
-                language: transcriptionResult.language || 'zh',
+                language: transcriptionResult.language || 'zh_cn',
                 timestamp: new Date(),
                 type: 'transcription',
                 author: '语音转录',
@@ -1152,7 +1152,7 @@ app.post('/api/transcription/audio', async (req, res) => {
             success: false, 
             error: 'AssemblyAI转录服务暂时不可用: ' + error.message,
             text: '',
-            language: 'zh',
+            language: 'zh_cn',
             service: 'assemblyai'
         });
     }
@@ -1188,7 +1188,7 @@ async function transcribeWithAssemblyAI(audioFile) {
         const transcriptionData = {
             audio_url: audioUrl,
             speech_model: "universal",
-            language_code: "zh", // 中文
+                            language_code: "zh_cn", // 中文
             punctuate: true,
             format_text: true
         };
@@ -1225,7 +1225,7 @@ async function transcribeWithAssemblyAI(audioFile) {
                 const response = {
                     success: true,
                     text: transcriptionResult.text || '',
-                    language: 'zh',
+                    language: 'zh_cn',
                     confidence: transcriptionResult.confidence || 0.9,
                     model: 'assemblyai-universal',
                     processing_time: processingTime,
@@ -1256,7 +1256,7 @@ async function transcribeWithAssemblyAI(audioFile) {
         return {
             success: false,
             text: '',
-            language: 'zh',
+            language: 'zh_cn',
             error: error.message,
             model: 'assemblyai-universal',
             processing_time: processingTime,
@@ -1278,7 +1278,7 @@ class AssemblyAIStreamingClient {
     async connect() {
         try {
             // 使用Universal Streaming v3 API - 通过URL参数传递token
-            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&format_turns=true&language_code=zh&token=${this.apiKey}`;
+            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&format_turns=true&language_code=zh_cn&token=${this.apiKey}`;
             logger.info(`🔗 尝试连接AssemblyAI: ${wsUrl.replace(this.apiKey, '***')}`);
             
             this.websocket = new WebSocket(wsUrl);

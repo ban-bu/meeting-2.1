@@ -20,7 +20,7 @@ class TranscriptionClient {
         this.sendInterval = 100; // 每100ms发送一次音频数据，减少频率
         
         // 中文转录支持
-        this.language = 'zh-CN'; // 支持中文
+        this.language = 'zh_cn'; // 支持中文 - 与服务器端保持一致
         
         // 累积转录内容
         this.fullTranscriptionText = '';
@@ -408,7 +408,7 @@ class TranscriptionClient {
                 this.handleTranscriptionResult({
                     type: 'transcription',
                     text: transcript,
-                    language: 'zh-CN',
+                    language: 'zh_cn',
                     timestamp: Date.now() / 1000,
                     source: 'local',
                     confidence: confidence
@@ -456,7 +456,7 @@ class TranscriptionClient {
             }),
             timestamp: Date.now(),
             isTranscription: true,
-            language: data.language || 'zh'
+                            language: data.language || 'zh_cn'
         };
         
         // 添加到消息列表
