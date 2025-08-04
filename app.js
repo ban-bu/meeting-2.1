@@ -4880,66 +4880,131 @@ async function testMicrophone() {
     }
 }
 
-// 重新定义toggleTranscription函数，适配固定转录面板
-function toggleTranscription() {
+// 开始转录函数
+function startTranscription() {
     if (window.transcriptionClient) {
-        window.transcriptionClient.toggleRecording();
+        window.transcriptionClient.startStreamingMode(roomId);
         
-        // 更新按钮文本
-        const recordBtn = document.getElementById('recordBtn');
-        const recordBtnText = document.getElementById('recordBtnText');
-        const isRecording = window.transcriptionClient.isRecording;
+        // 记录开始时间
+        window.transcriptionClient.transcriptionStartTime = new Date();
         
-        if (recordBtnText) {
-            recordBtnText.textContent = isRecording ? '停止转录' : '开始转录';
-        }
-        if (recordBtn) {
-            const icon = recordBtn.querySelector('i');
-            if (icon) {
-                icon.className = isRecording ? 'fas fa-stop' : 'fas fa-microphone';
-            }
-            recordBtn.className = isRecording ? 'btn-stop' : 'btn-record';
-        }
+        // 重置累积内容
+        window.transcriptionClient.fullTranscriptionText = '';
         
-        // 更新状态显示
+        // 更新UI
+        document.getElementById('startRecordBtn').style.display = 'none';
+        document.getElementById('stopRecordBtn').style.display = 'block';
+        document.getElementById('downloadBtn').style.display = 'none';
+        
+        // 更新状态
         const statusDiv = document.getElementById('transcriptionStatus');
         if (statusDiv) {
             const iconSpan = statusDiv.querySelector('i');
             const textSpan = statusDiv.querySelector('span');
             if (iconSpan && textSpan) {
-                if (isRecording) {
-                    iconSpan.className = 'fas fa-microphone';
-                    textSpan.textContent = '正在转录...';
-                    statusDiv.style.color = '#22c55e';
-                } else {
-                    iconSpan.className = 'fas fa-microphone-slash';
-                    textSpan.textContent = '转录已停止';
-                    statusDiv.style.color = '#6b7280';
-                }
+                iconSpan.className = 'fas fa-microphone';
+                textSpan.textContent = '正在转录...';
+                statusDiv.style.color = '#22c55e';
             }
         }
+        
+        showToast('开始语音转录', 'success');
     } else {
         showToast('转录服务未初始化，请刷新页面', 'error');
     }
 }
 
-// 最小化转录面板函数
-function toggleMinimize() {
-    const panel = document.getElementById('transcriptionPanel');
-    const minimizeBtn = document.getElementById('minimizeBtn');
-    
-    if (panel && minimizeBtn) {
-        const isMinimized = panel.classList.contains('minimized');
-        const icon = minimizeBtn.querySelector('i');
+// 停止转录函数
+function stopTranscription() {
+    if (window.transcriptionClient) {
+        window.transcriptionClient.stopStreamingMode();
         
-        if (isMinimized) {
-            panel.classList.remove('minimized');
-            if (icon) icon.className = 'fas fa-minus';
-            minimizeBtn.title = '最小化';
-        } else {
-            panel.classList.add('minimized');
-            if (icon) icon.className = 'fas fa-plus';
-            minimizeBtn.title = '展开';
+        // 更新UI
+        document.getElementById('startRecordBtn').style.display = 'block';
+        document.getElementById('stopRecordBtn').style.display = 'none';
+        
+        // 更新状态
+        const statusDiv = document.getElementById('transcriptionStatus');
+        if (statusDiv) {
+            const iconSpan = statusDiv.querySelector('i');
+            const textSpan = statusDiv.querySelector('span');
+            if (iconSpan && textSpan) {
+                iconSpan.className = 'fas fa-microphone-slash';
+                textSpan.textContent = '转录已停止';
+                statusDiv.style.color = '#6b7280';
+            }
         }
+        
+        // 如果有转录内容，显示下载按钮
+        if (window.transcriptionClient.fullTranscriptionText.length > 0) {
+            document.getElementById('downloadBtn').style.display = 'block';
+        }
+        
+        showToast('转录已停止', 'info');
+    } else {
+        showToast('转录服务未初始化，请刷新页面', 'error');
+    }
+}
+
+// 下载转录文档函数
+function downloadTranscription() {
+    if (!window.transcriptionClient || !window.transcriptionClient.fullTranscriptionText) {
+        showToast('没有可下载的转录内容', 'warning');
+        return;
+    }
+    
+    const content = window.transcriptionClient.fullTranscriptionText;
+    const startTime = window.transcriptionClient.transcriptionStartTime || new Date();
+    const timestamp = startTime.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }).replace(/[/\\:*?"<>|]/g, '-');
+    
+    // 创建文档内容
+    const documentContent = `会议转录文档
+===================
+
+房间: ${roomId || '未知'}
+开始时间: ${startTime.toLocaleString('zh-CN')}
+结束时间: ${new Date().toLocaleString('zh-CN')}
+转录内容长度: ${content.length} 字符
+
+转录内容:
+===================
+
+${content}
+
+===================
+此文档由 Vibe Meeting 实时转录功能生成
+`;
+    
+    // 创建并下载文件
+    const blob = new Blob([documentContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `会议转录-${timestamp}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showToast('转录文档已下载', 'success');
+}
+
+// 兼容函数：保持向后兼容
+function toggleTranscription() {
+    // 检查当前状态并切换
+    const startBtn = document.getElementById('startRecordBtn');
+    const stopBtn = document.getElementById('stopRecordBtn');
+    
+    if (startBtn && startBtn.style.display !== 'none') {
+        startTranscription();
+    } else if (stopBtn && stopBtn.style.display !== 'none') {
+        stopTranscription();
     }
 }

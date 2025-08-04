@@ -21,6 +21,10 @@ class TranscriptionClient {
         
         // 中文转录支持
         this.language = 'zh-CN'; // 支持中文
+        
+        // 累积转录内容
+        this.fullTranscriptionText = '';
+        this.transcriptionStartTime = null;
         this.processor = null;
         this.stream = null;
         
@@ -566,6 +570,12 @@ Object.assign(TranscriptionClient.prototype, {
         this.audioBuffer = [];
         this.lastSendTime = 0;
         
+        // 显示下载按钮（如果有内容）
+        const downloadBtn = document.getElementById('downloadBtn');
+        if (downloadBtn && this.fullTranscriptionText.length > 0) {
+            downloadBtn.style.display = 'block';
+        }
+        
         if (!window.realtimeClient || !window.realtimeClient.socket) {
             return;
         }
@@ -669,43 +679,36 @@ Object.assign(TranscriptionClient.prototype, {
             placeholder.style.display = 'none';
         }
         
-        // 获取或创建连续转录容器
-        let continuousDiv = document.getElementById('continuousTranscription');
-        if (!continuousDiv) {
-            continuousDiv = document.createElement('div');
-            continuousDiv.id = 'continuousTranscription';
-            continuousDiv.className = 'continuous-transcription';
-            continuousDiv.style.cssText = `
-                background: #f8fafc;
+        // 获取或创建累积转录容器
+        let cumulativeDiv = document.getElementById('cumulativeTranscription');
+        if (!cumulativeDiv) {
+            cumulativeDiv = document.createElement('div');
+            cumulativeDiv.id = 'cumulativeTranscription';
+            cumulativeDiv.className = 'cumulative-transcription';
+            cumulativeDiv.style.cssText = `
+                background: white;
                 border-radius: 8px;
                 padding: 15px;
-                margin: 10px 0;
                 font-size: 14px;
-                line-height: 1.6;
+                line-height: 1.8;
                 color: #374151;
-                border-left: 4px solid #3b82f6;
-                max-height: 200px;
-                overflow-y: auto;
+                min-height: 100px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
             `;
-            transcriptionHistory.appendChild(continuousDiv);
+            transcriptionHistory.appendChild(cumulativeDiv);
         }
         
-        // 获取或创建当前正在转录的span
-        let currentSpan = continuousDiv.querySelector('.current-transcribing');
-        if (!currentSpan) {
-            currentSpan = document.createElement('span');
-            currentSpan.className = 'current-transcribing';
-            currentSpan.style.cssText = `
-                color: #3b82f6;
-                background: rgba(59, 130, 246, 0.1);
-                padding: 2px 4px;
-                border-radius: 3px;
-                animation: pulse 1.5s infinite;
-            `;
-            continuousDiv.appendChild(currentSpan);
+        // 更新实时预览：显示已确认的文本 + 当前正在转录的文本
+        const currentPreview = text.trim();
+        if (currentPreview) {
+            const finalText = this.fullTranscriptionText;
+            const previewHtml = finalText + '<span class="current-preview" style="color: #3b82f6; background: rgba(59, 130, 246, 0.1); padding: 2px 4px; border-radius: 3px; animation: pulse 1.5s infinite;">' + currentPreview + '</span>';
+            cumulativeDiv.innerHTML = previewHtml;
+        } else {
+            cumulativeDiv.innerHTML = this.fullTranscriptionText;
         }
         
-        currentSpan.textContent = text;
         transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
     },
     
@@ -713,30 +716,38 @@ Object.assign(TranscriptionClient.prototype, {
         const transcriptionHistory = document.getElementById('transcriptionHistory');
         if (!transcriptionHistory) return;
         
-        // 移除当前正在转录的临时文本
-        const currentSpan = document.querySelector('.current-transcribing');
-        if (currentSpan) {
-            currentSpan.remove();
+        const cleanText = text.trim();
+        if (!cleanText) {
+            console.log('🚫 跳过空白的转录结果');
+            return;
         }
         
-        // 避免重复：检查最近的转录内容
-        const continuousDiv = document.getElementById('continuousTranscription');
-        if (continuousDiv) {
-            const lastText = continuousDiv.textContent.trim();
-            if (lastText.endsWith(text.trim()) || text.trim() === '') {
-                console.log('🚫 跳过重复或空白的转录结果:', text);
-                return;
-            }
+        // 避免重复：检查是否已经包含在全文中
+        if (this.fullTranscriptionText.includes(cleanText)) {
+            console.log('🚫 跳过重复的转录结果:', cleanText);
+            return;
         }
         
-        // 添加到连续转录容器
-        this.addToContinuousTranscription(text, confidence, timestamp);
+        // 添加到累积转录文本
+        if (this.fullTranscriptionText.length > 0) {
+            this.fullTranscriptionText += ' ';
+        }
+        this.fullTranscriptionText += cleanText;
         
-        // 🚫 不再发送到聊天记录，只保留在转录面板中
-        console.log('✅ 转录结果已添加到实时转录面板:', text);
+        // 更新显示
+        this.updateCumulativeDisplay();
+        
+        // 显示下载按钮
+        const downloadBtn = document.getElementById('downloadBtn');
+        if (downloadBtn && this.fullTranscriptionText.length > 0) {
+            downloadBtn.style.display = 'block';
+        }
+        
+        console.log('✅ 转录结果已添加:', cleanText);
+        console.log('📝 当前全文长度:', this.fullTranscriptionText.length);
     },
     
-    addToContinuousTranscription(text, confidence, timestamp) {
+    updateCumulativeDisplay() {
         const transcriptionHistory = document.getElementById('transcriptionHistory');
         if (!transcriptionHistory) return;
         
@@ -746,54 +757,28 @@ Object.assign(TranscriptionClient.prototype, {
             placeholder.style.display = 'none';
         }
         
-        // 获取或创建连续转录容器
-        let continuousDiv = document.getElementById('continuousTranscription');
-        if (!continuousDiv) {
-            continuousDiv = document.createElement('div');
-            continuousDiv.id = 'continuousTranscription';
-            continuousDiv.className = 'continuous-transcription';
-            continuousDiv.style.cssText = `
-                background: #f8fafc;
+        // 获取或创建累积转录容器
+        let cumulativeDiv = document.getElementById('cumulativeTranscription');
+        if (!cumulativeDiv) {
+            cumulativeDiv = document.createElement('div');
+            cumulativeDiv.id = 'cumulativeTranscription';
+            cumulativeDiv.className = 'cumulative-transcription';
+            cumulativeDiv.style.cssText = `
+                background: white;
                 border-radius: 8px;
                 padding: 15px;
-                margin: 10px 0;
                 font-size: 14px;
-                line-height: 1.6;
+                line-height: 1.8;
                 color: #374151;
-                border-left: 4px solid #3b82f6;
-                max-height: 200px;
-                overflow-y: auto;
+                min-height: 100px;
                 white-space: pre-wrap;
+                word-wrap: break-word;
             `;
-            
-            // 添加标题
-            const titleDiv = document.createElement('div');
-            titleDiv.style.cssText = `
-                font-size: 12px;
-                color: #6b7280;
-                margin-bottom: 8px;
-                font-weight: 500;
-            `;
-            titleDiv.textContent = '📝 实时转录内容';
-            continuousDiv.appendChild(titleDiv);
-            
-            // 添加内容容器
-            const contentDiv = document.createElement('div');
-            contentDiv.id = 'transcriptionContent';
-            continuousDiv.appendChild(contentDiv);
-            
-            transcriptionHistory.appendChild(continuousDiv);
+            transcriptionHistory.appendChild(cumulativeDiv);
         }
         
-        const contentDiv = continuousDiv.querySelector('#transcriptionContent');
-        if (contentDiv) {
-            // 如果内容不为空，添加一个空格和新文本
-            if (contentDiv.textContent.trim() !== '') {
-                contentDiv.textContent += ' ';
-            }
-            contentDiv.textContent += text.trim();
-        }
-        
+        // 显示全部累积内容
+        cumulativeDiv.textContent = this.fullTranscriptionText;
         transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
     },
     
