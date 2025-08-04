@@ -18,6 +18,9 @@ class TranscriptionClient {
         this.audioBuffer = [];
         this.lastSendTime = 0;
         this.sendInterval = 100; // 每100ms发送一次音频数据，减少频率
+        
+        // 中文转录支持
+        this.language = 'zh-CN'; // 支持中文
         this.processor = null;
         this.stream = null;
         
@@ -657,91 +660,6 @@ Object.assign(TranscriptionClient.prototype, {
     },
     
     updatePartialTranscription(text) {
-        let partialDiv = document.getElementById('partialTranscription');
-        if (!partialDiv) {
-            partialDiv = document.createElement('div');
-            partialDiv.id = 'partialTranscription';
-            partialDiv.className = 'partial-transcription';
-            partialDiv.style.cssText = `
-                background: rgba(99, 102, 241, 0.1);
-                border: 1px dashed #6366f1;
-                border-radius: 8px;
-                padding: 8px 12px;
-                margin: 5px 0;
-                font-style: italic;
-                color: #6366f1;
-                animation: pulse 2s infinite;
-            `;
-            
-            // 显示在实时转录面板中，而不是讨论记录中
-            const transcriptionHistory = document.getElementById('transcriptionHistory');
-            if (transcriptionHistory) {
-                // 清除占位符
-                const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
-                if (placeholder) {
-                    placeholder.style.display = 'none';
-                }
-                transcriptionHistory.appendChild(partialDiv);
-                transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
-            }
-        }
-        
-        partialDiv.innerHTML = `🎙️ [正在转录...] ${text}`;
-    },
-    
-    addFinalTranscription(text, confidence, timestamp) {
-        const partialDiv = document.getElementById('partialTranscription');
-        if (partialDiv) {
-            partialDiv.remove();
-        }
-        
-        // 避免重复：检查最后一条转录是否相同
-        const transcriptionHistory = document.getElementById('transcriptionHistory');
-        if (transcriptionHistory) {
-            const lastTranscription = transcriptionHistory.querySelector('.final-transcription:last-child');
-            if (lastTranscription && lastTranscription.textContent.includes(text)) {
-                console.log('🚫 跳过重复的转录结果:', text);
-                return;
-            }
-        }
-        
-        // 在实时转录面板中显示最终结果
-        this.addTranscriptionToHistory(text, confidence, timestamp);
-        
-        // 同时发送到聊天记录（可选）
-        const transcriptionMessage = {
-            type: 'transcription',
-            text: `🎙️ [语音转录] ${text}`,
-            author: currentUsername || '语音转录',
-            userId: currentUserId || 'transcription-system',
-            time: new Date().toLocaleTimeString('zh-CN', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }),
-            timestamp: timestamp || Date.now(),
-            isTranscription: true,
-            confidence: confidence,
-            isStreaming: true
-        };
-        
-        if (typeof addMessage === 'function') {
-            addMessage('transcription', transcriptionMessage.text, transcriptionMessage.author, transcriptionMessage.userId);
-        } else {
-            if (typeof messages !== 'undefined') {
-                messages.push(transcriptionMessage);
-            }
-            if (typeof renderMessage === 'function') {
-                renderMessage(transcriptionMessage);
-            }
-            if (typeof scrollToBottom === 'function') {
-                scrollToBottom();
-            }
-        }
-        
-        this.showToast(`语音转录完成 (${Math.round(confidence * 100)}%)`, 'success');
-    },
-    
-    addTranscriptionToHistory(text, confidence, timestamp) {
         const transcriptionHistory = document.getElementById('transcriptionHistory');
         if (!transcriptionHistory) return;
         
@@ -751,34 +669,131 @@ Object.assign(TranscriptionClient.prototype, {
             placeholder.style.display = 'none';
         }
         
-        const finalDiv = document.createElement('div');
-        finalDiv.className = 'final-transcription';
-        finalDiv.style.cssText = `
-            background: rgba(34, 197, 94, 0.1);
-            border: 1px solid #22c55e;
-            border-radius: 8px;
-            padding: 10px 12px;
-            margin: 5px 0;
-            color: #16a34a;
-            font-weight: 500;
-        `;
+        // 获取或创建连续转录容器
+        let continuousDiv = document.getElementById('continuousTranscription');
+        if (!continuousDiv) {
+            continuousDiv = document.createElement('div');
+            continuousDiv.id = 'continuousTranscription';
+            continuousDiv.className = 'continuous-transcription';
+            continuousDiv.style.cssText = `
+                background: #f8fafc;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 10px 0;
+                font-size: 14px;
+                line-height: 1.6;
+                color: #374151;
+                border-left: 4px solid #3b82f6;
+                max-height: 200px;
+                overflow-y: auto;
+            `;
+            transcriptionHistory.appendChild(continuousDiv);
+        }
         
-        const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString('zh-CN', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
+        // 获取或创建当前正在转录的span
+        let currentSpan = continuousDiv.querySelector('.current-transcribing');
+        if (!currentSpan) {
+            currentSpan = document.createElement('span');
+            currentSpan.className = 'current-transcribing';
+            currentSpan.style.cssText = `
+                color: #3b82f6;
+                background: rgba(59, 130, 246, 0.1);
+                padding: 2px 4px;
+                border-radius: 3px;
+                animation: pulse 1.5s infinite;
+            `;
+            continuousDiv.appendChild(currentSpan);
+        }
         
-        const confidenceStr = confidence ? ` (置信度: ${Math.round(confidence * 100)}%)` : '';
+        currentSpan.textContent = text;
+        transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
+    },
+    
+    addFinalTranscription(text, confidence, timestamp) {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
         
-        finalDiv.innerHTML = `
-            <div style="font-size: 0.8em; color: #666; margin-bottom: 4px;">
-                ${timeStr}${confidenceStr}
-            </div>
-            <div>🎙️ ${text}</div>
-        `;
+        // 移除当前正在转录的临时文本
+        const currentSpan = document.querySelector('.current-transcribing');
+        if (currentSpan) {
+            currentSpan.remove();
+        }
         
-        transcriptionHistory.appendChild(finalDiv);
+        // 避免重复：检查最近的转录内容
+        const continuousDiv = document.getElementById('continuousTranscription');
+        if (continuousDiv) {
+            const lastText = continuousDiv.textContent.trim();
+            if (lastText.endsWith(text.trim()) || text.trim() === '') {
+                console.log('🚫 跳过重复或空白的转录结果:', text);
+                return;
+            }
+        }
+        
+        // 添加到连续转录容器
+        this.addToContinuousTranscription(text, confidence, timestamp);
+        
+        // 🚫 不再发送到聊天记录，只保留在转录面板中
+        console.log('✅ 转录结果已添加到实时转录面板:', text);
+    },
+    
+    addToContinuousTranscription(text, confidence, timestamp) {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
+        
+        // 清除占位符
+        const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        
+        // 获取或创建连续转录容器
+        let continuousDiv = document.getElementById('continuousTranscription');
+        if (!continuousDiv) {
+            continuousDiv = document.createElement('div');
+            continuousDiv.id = 'continuousTranscription';
+            continuousDiv.className = 'continuous-transcription';
+            continuousDiv.style.cssText = `
+                background: #f8fafc;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 10px 0;
+                font-size: 14px;
+                line-height: 1.6;
+                color: #374151;
+                border-left: 4px solid #3b82f6;
+                max-height: 200px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+            `;
+            
+            // 添加标题
+            const titleDiv = document.createElement('div');
+            titleDiv.style.cssText = `
+                font-size: 12px;
+                color: #6b7280;
+                margin-bottom: 8px;
+                font-weight: 500;
+            `;
+            titleDiv.textContent = '📝 实时转录内容';
+            continuousDiv.appendChild(titleDiv);
+            
+            // 添加内容容器
+            const contentDiv = document.createElement('div');
+            contentDiv.id = 'transcriptionContent';
+            continuousDiv.appendChild(contentDiv);
+            
+            transcriptionHistory.appendChild(continuousDiv);
+        }
+        
+        const contentDiv = continuousDiv.querySelector('#transcriptionContent');
+        if (contentDiv) {
+            // 如果内容不为空，添加一个空格和新文本
+            if (contentDiv.textContent.trim() !== '') {
+                contentDiv.textContent += ' ';
+            }
+            contentDiv.textContent += text.trim();
+        }
+        
         transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
     },
     

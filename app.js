@@ -4880,19 +4880,66 @@ async function testMicrophone() {
     }
 }
 
-// 重新定义toggleTranscription函数，兼容现有HTML按钮
+// 重新定义toggleTranscription函数，适配固定转录面板
 function toggleTranscription() {
-    // 先显示转录面板（如果未显示）
-    const panel = document.getElementById('transcriptionPanel');
-    if (!panel || panel.style.display === 'none') {
-        toggleTranscriptionPanel();
-        return;
-    }
-    
-    // 如果面板已显示，切换录音状态
     if (window.transcriptionClient) {
         window.transcriptionClient.toggleRecording();
+        
+        // 更新按钮文本
+        const recordBtn = document.getElementById('recordBtn');
+        const recordBtnText = document.getElementById('recordBtnText');
+        const isRecording = window.transcriptionClient.isRecording;
+        
+        if (recordBtnText) {
+            recordBtnText.textContent = isRecording ? '停止转录' : '开始转录';
+        }
+        if (recordBtn) {
+            const icon = recordBtn.querySelector('i');
+            if (icon) {
+                icon.className = isRecording ? 'fas fa-stop' : 'fas fa-microphone';
+            }
+            recordBtn.className = isRecording ? 'btn-stop' : 'btn-record';
+        }
+        
+        // 更新状态显示
+        const statusDiv = document.getElementById('transcriptionStatus');
+        if (statusDiv) {
+            const iconSpan = statusDiv.querySelector('i');
+            const textSpan = statusDiv.querySelector('span');
+            if (iconSpan && textSpan) {
+                if (isRecording) {
+                    iconSpan.className = 'fas fa-microphone';
+                    textSpan.textContent = '正在转录...';
+                    statusDiv.style.color = '#22c55e';
+                } else {
+                    iconSpan.className = 'fas fa-microphone-slash';
+                    textSpan.textContent = '转录已停止';
+                    statusDiv.style.color = '#6b7280';
+                }
+            }
+        }
     } else {
         showToast('转录服务未初始化，请刷新页面', 'error');
+    }
+}
+
+// 最小化转录面板函数
+function toggleMinimize() {
+    const panel = document.getElementById('transcriptionPanel');
+    const minimizeBtn = document.getElementById('minimizeBtn');
+    
+    if (panel && minimizeBtn) {
+        const isMinimized = panel.classList.contains('minimized');
+        const icon = minimizeBtn.querySelector('i');
+        
+        if (isMinimized) {
+            panel.classList.remove('minimized');
+            if (icon) icon.className = 'fas fa-minus';
+            minimizeBtn.title = '最小化';
+        } else {
+            panel.classList.add('minimized');
+            if (icon) icon.className = 'fas fa-plus';
+            minimizeBtn.title = '展开';
+        }
     }
 }

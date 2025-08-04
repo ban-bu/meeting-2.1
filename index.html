@@ -306,30 +306,29 @@
         </div>
     </div>
 
-    <!-- 实时转录面板 -->
-    <div class="transcription-panel" id="transcriptionPanel" style="display: none;">
+    <!-- 固定在左下角的实时转录面板 -->
+    <div class="fixed-transcription-panel" id="transcriptionPanel">
         <div class="transcription-header">
-            <h3><i class="fas fa-closed-captioning"></i> 实时转录</h3>
-            <button class="transcription-close" onclick="closeTranscription()">&times;</button>
+            <h4><i class="fas fa-closed-captioning"></i> 实时转录</h4>
+            <div class="transcription-controls">
+                <button class="btn-record" id="recordBtn" onclick="toggleTranscription()">
+                    <i class="fas fa-microphone"></i> <span id="recordBtnText">开始转录</span>
+                </button>
+                <button class="btn-minimize" id="minimizeBtn" onclick="toggleMinimize()" title="最小化/展开">
+                    <i class="fas fa-minus"></i>
+                </button>
+            </div>
         </div>
         <div class="transcription-content" id="transcriptionContent">
             <div class="transcription-status" id="transcriptionStatus">
                 <i class="fas fa-microphone-slash"></i>
                 <span>转录已停止</span>
             </div>
-            <div class="transcription-controls">
-                <button class="btn-record" id="recordBtn" onclick="toggleTranscription()">
-                    <i class="fas fa-microphone"></i> 开始转录
-                </button>
-                <button class="btn-test-mic" id="testMicBtn" onclick="testMicrophone()" title="测试麦克风">
-                    <i class="fas fa-microphone-slash"></i>
-                </button>
-            </div>
             <div class="transcription-history" id="transcriptionHistory">
                 <div class="transcription-placeholder">
                     <i class="fas fa-info-circle"></i>
                     <p>点击"开始转录"按钮开始语音转录</p>
-                    <p>支持实时转录和会议记录</p>
+                    <p>支持中英文实时转录</p>
                 </div>
             </div>
         </div>

@@ -2397,6 +2397,7 @@ body {
 
 /* ==================== 实时转录面板样式 ==================== */
 
+/* 原有的转录面板样式（保留用于兼容性） */
 .transcription-panel {
     position: fixed;
     top: 20px;
@@ -2412,6 +2413,33 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+}
+
+/* 新的固定在左下角的转录面板 */
+.fixed-transcription-panel {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    width: 400px;
+    max-height: 300px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border: 1px solid var(--border-color);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.fixed-transcription-panel.minimized {
+    max-height: 60px;
+}
+
+.fixed-transcription-panel.minimized .transcription-content {
+    display: none;
 }
 
 .transcription-header {
@@ -2601,6 +2629,81 @@ body {
 .transcription-item.ai-processed {
     border-left: 4px solid var(--success-color);
     background: linear-gradient(90deg, rgba(16, 185, 129, 0.05), transparent);
+}
+
+/* 固定转录面板按钮样式 */
+.fixed-transcription-panel .transcription-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.fixed-transcription-panel .btn-record,
+.fixed-transcription-panel .btn-stop {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.fixed-transcription-panel .btn-stop {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
+.fixed-transcription-panel .btn-record:hover,
+.fixed-transcription-panel .btn-stop:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.fixed-transcription-panel .btn-minimize {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+    border: none;
+    padding: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.fixed-transcription-panel .btn-minimize:hover {
+    background: rgba(107, 114, 128, 0.2);
+    color: #374151;
+}
+
+.transcription-status {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: #6b7280;
+    background: rgba(243, 244, 246, 0.5);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 连续转录内容样式 */
+.continuous-transcription {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* 按钮状态动画 */
