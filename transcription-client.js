@@ -643,10 +643,29 @@ Object.assign(TranscriptionClient.prototype, {
         let text, isFinal, confidence, timestamp;
         
         // 处理Universal-Streaming格式
-        if (data.type === 'Turn') {
-            text = data.transcript || '';
-            isFinal = data.end_of_turn || false;
-            confidence = data.end_of_turn_confidence;
+        if (data.type === 'Turn' || data.turn_order !== undefined) {
+            text = data.text || data.transcript || '';
+            
+            // 只处理格式化后的最终结果，避免重复
+            if (data.end_of_turn === true && data.turn_is_formatted === true) {
+                // 这是格式化的最终结果
+                isFinal = true;
+                console.log(`📝 格式化最终转录结果:`, text, `(turn_order: ${data.turn_order})`);
+            } else if (data.end_of_turn === false) {
+                // 这是部分结果，用于实时预览
+                isFinal = false;
+                console.log(`📝 部分转录结果:`, text);
+            } else if (data.end_of_turn === true && data.turn_is_formatted !== true) {
+                // 跳过未格式化的最终结果，避免重复
+                console.log(`🚫 跳过未格式化的转录结果:`, text, `(formatted: ${data.turn_is_formatted})`);
+                return;
+            } else {
+                // 其他情况也跳过
+                console.log(`🚫 跳过不明确的转录结果:`, text, data);
+                return;
+            }
+            
+            confidence = data.confidence || data.end_of_turn_confidence || 0.9;
             timestamp = Date.now();
         } else {
             // 兼容旧格式

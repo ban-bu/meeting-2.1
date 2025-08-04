@@ -1278,7 +1278,7 @@ class AssemblyAIStreamingClient {
     async connect() {
         try {
             // 使用Universal Streaming v3 API - 通过URL参数传递token
-            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&format_turns=true&language_code=zh_cn&token=${this.apiKey}`;
+            const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&encoding=pcm_s16le&format_turns=true&token=${this.apiKey}`;
             logger.info(`🔗 尝试连接AssemblyAI: ${wsUrl.replace(this.apiKey, '***')}`);
             
             this.websocket = new WebSocket(wsUrl);
