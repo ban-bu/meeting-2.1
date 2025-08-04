@@ -13,6 +13,11 @@ class TranscriptionClient {
         this.recordingStartTime = null;
         this.isStreamingMode = true; // 默认使用流式模式
         this.audioContext = null;
+        
+        // 音频缓冲机制
+        this.audioBuffer = [];
+        this.lastSendTime = 0;
+        this.sendInterval = 100; // 每100ms发送一次音频数据，减少频率
         this.processor = null;
         this.stream = null;
         
@@ -551,6 +556,13 @@ Object.assign(TranscriptionClient.prototype, {
     },
     
     async stopStreamingTranscription() {
+        // 发送剩余的音频缓冲数据
+        this.flushAudioBuffer();
+        
+        // 清空音频缓冲区
+        this.audioBuffer = [];
+        this.lastSendTime = 0;
+        
         if (!window.realtimeClient || !window.realtimeClient.socket) {
             return;
         }
@@ -565,12 +577,39 @@ Object.assign(TranscriptionClient.prototype, {
             return;
         }
         
+        // 添加到缓冲区
+        this.audioBuffer.push(new Uint8Array(pcmData));
+        
+        // 检查是否应该发送数据（基于时间间隔）
+        const now = Date.now();
+        if (now - this.lastSendTime >= this.sendInterval) {
+            this.flushAudioBuffer();
+            this.lastSendTime = now;
+        }
+    },
+    
+    flushAudioBuffer() {
+        if (this.audioBuffer.length === 0) return;
+        
+        // 合并所有缓冲的音频数据
+        const totalLength = this.audioBuffer.reduce((sum, buffer) => sum + buffer.length, 0);
+        const mergedBuffer = new Uint8Array(totalLength);
+        
+        let offset = 0;
+        for (const buffer of this.audioBuffer) {
+            mergedBuffer.set(buffer, offset);
+            offset += buffer.length;
+        }
+        
         const socket = window.realtimeClient.socket;
-        console.log('📤 发送音频数据:', pcmData.byteLength, 'bytes');
+        console.log('📤 发送缓冲音频数据:', mergedBuffer.length, 'bytes');
         
         // 将ArrayBuffer转换为Array以便Socket.IO传输
-        const audioArray = Array.from(new Uint8Array(pcmData));
+        const audioArray = Array.from(mergedBuffer);
         socket.emit('audioData', { audioData: audioArray });
+        
+        // 清空缓冲区
+        this.audioBuffer = [];
     },
     
     convertToPCM16(float32Array) {
@@ -634,10 +673,16 @@ Object.assign(TranscriptionClient.prototype, {
                 animation: pulse 2s infinite;
             `;
             
-            const messagesContainer = document.getElementById('messages');
-            if (messagesContainer) {
-                messagesContainer.appendChild(partialDiv);
-                scrollToBottom();
+            // 显示在实时转录面板中，而不是讨论记录中
+            const transcriptionHistory = document.getElementById('transcriptionHistory');
+            if (transcriptionHistory) {
+                // 清除占位符
+                const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+                if (placeholder) {
+                    placeholder.style.display = 'none';
+                }
+                transcriptionHistory.appendChild(partialDiv);
+                transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
             }
         }
         
@@ -650,6 +695,20 @@ Object.assign(TranscriptionClient.prototype, {
             partialDiv.remove();
         }
         
+        // 避免重复：检查最后一条转录是否相同
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (transcriptionHistory) {
+            const lastTranscription = transcriptionHistory.querySelector('.final-transcription:last-child');
+            if (lastTranscription && lastTranscription.textContent.includes(text)) {
+                console.log('🚫 跳过重复的转录结果:', text);
+                return;
+            }
+        }
+        
+        // 在实时转录面板中显示最终结果
+        this.addTranscriptionToHistory(text, confidence, timestamp);
+        
+        // 同时发送到聊天记录（可选）
         const transcriptionMessage = {
             type: 'transcription',
             text: `🎙️ [语音转录] ${text}`,
@@ -680,6 +739,47 @@ Object.assign(TranscriptionClient.prototype, {
         }
         
         this.showToast(`语音转录完成 (${Math.round(confidence * 100)}%)`, 'success');
+    },
+    
+    addTranscriptionToHistory(text, confidence, timestamp) {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
+        
+        // 清除占位符
+        const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        
+        const finalDiv = document.createElement('div');
+        finalDiv.className = 'final-transcription';
+        finalDiv.style.cssText = `
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid #22c55e;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin: 5px 0;
+            color: #16a34a;
+            font-weight: 500;
+        `;
+        
+        const timeStr = new Date(timestamp || Date.now()).toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        
+        const confidenceStr = confidence ? ` (置信度: ${Math.round(confidence * 100)}%)` : '';
+        
+        finalDiv.innerHTML = `
+            <div style="font-size: 0.8em; color: #666; margin-bottom: 4px;">
+                ${timeStr}${confidenceStr}
+            </div>
+            <div>🎙️ ${text}</div>
+        `;
+        
+        transcriptionHistory.appendChild(finalDiv);
+        transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
     },
     
     displayTranscriptionFromOthers(data) {
