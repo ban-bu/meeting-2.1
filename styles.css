@@ -371,7 +371,8 @@ body {
 }
 
 .btn-start-recording,
-.btn-stop-recording {
+.btn-stop-recording,
+.btn-xfyun-recording {
     background: linear-gradient(135deg, #10b981, #059669);
     color: white;
     border: none;
@@ -391,10 +392,24 @@ body {
     background: linear-gradient(135deg, #ef4444, #dc2626);
 }
 
+.btn-xfyun-recording {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.btn-xfyun-recording.recording {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+
 .btn-start-recording:hover,
-.btn-stop-recording:hover {
+.btn-stop-recording:hover,
+.btn-xfyun-recording:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+}
+
+.transcription-panel .btn-xfyun-recording {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
 }
 
 .btn-download {

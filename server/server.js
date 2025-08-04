@@ -1,6 +1,7 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const expressWs = require('express-ws');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -12,10 +13,14 @@ const path = require('path');
 const axios = require('axios');
 const fs = require('fs-extra');
 const WebSocket = require('ws');
+const crypto = require('crypto');
 require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+
+// 初始化express-ws
+expressWs(app, server);
 
 // 速率限制器 - 调整为更宽松的设置，适应Railway环境
 const rateLimiter = new RateLimiterMemory({
@@ -1596,6 +1601,187 @@ app.get('/', (req, res) => {
         `);
     }
 });
+
+// ==================== 科大讯飞实时语音转写代理 ====================
+
+// 科大讯飞配置
+const XFYUN_CONFIG = {
+    appId: '84959f16',
+    apiKey: '065eee5163baa4692717b923323e6853',
+    apiSecret: '', // 如果需要的话
+    wsUrl: 'ws://rtasr.xfyun.cn/v1/ws'
+};
+
+// 生成科大讯飞鉴权参数
+function generateXfyunAuth() {
+    const host = 'rtasr.xfyun.cn';
+    const path = '/v1/ws';
+    const date = new Date().toUTCString();
+    
+    // 构建签名字符串
+    const signatureOrigin = `host: ${host}\ndate: ${date}\nGET ${path} HTTP/1.1`;
+    
+    // 使用HMAC-SHA256进行签名
+    const signature = crypto.createHmac('sha256', XFYUN_CONFIG.apiKey)
+                           .update(signatureOrigin, 'utf8')
+                           .digest('base64');
+    
+    // 构建Authorization头
+    const authorization = `api_key="${XFYUN_CONFIG.apiKey}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`;
+    const authorizationBase64 = Buffer.from(authorization).toString('base64');
+    
+    return {
+        authorization: authorizationBase64,
+        date: date,
+        host: host
+    };
+}
+
+// 科大讯飞WebSocket代理路由
+app.ws('/xfyun-proxy', (ws, req) => {
+    logger.info('🎤 新的科大讯飞转录连接');
+    
+    let xfyunWs = null;
+    
+    // 连接到科大讯飞服务
+    const connectToXfyun = () => {
+        try {
+            const auth = generateXfyunAuth();
+            const wsUrl = `${XFYUN_CONFIG.wsUrl}?authorization=${auth.authorization}&date=${encodeURIComponent(auth.date)}&host=${auth.host}`;
+            
+            logger.debug('连接到科大讯飞:', wsUrl);
+            
+            xfyunWs = new WebSocket(wsUrl);
+            
+            xfyunWs.on('open', () => {
+                logger.info('✅ 科大讯飞WebSocket连接成功');
+                ws.send(JSON.stringify({
+                    action: 'connected',
+                    message: '已连接到科大讯飞服务'
+                }));
+            });
+            
+            xfyunWs.on('message', (data) => {
+                // 转发科大讯飞的响应到客户端
+                try {
+                    const message = JSON.parse(data);
+                    logger.debug('科大讯飞响应:', message);
+                    
+                    ws.send(JSON.stringify({
+                        action: 'result',
+                        data: message
+                    }));
+                } catch (error) {
+                    logger.error('解析科大讯飞响应失败:', error);
+                }
+            });
+            
+            xfyunWs.on('error', (error) => {
+                logger.error('科大讯飞WebSocket错误:', error);
+                ws.send(JSON.stringify({
+                    action: 'error',
+                    desc: '科大讯飞服务错误: ' + error.message
+                }));
+            });
+            
+            xfyunWs.on('close', () => {
+                logger.info('🔌 科大讯飞WebSocket连接关闭');
+                ws.send(JSON.stringify({
+                    action: 'disconnected',
+                    message: '科大讯飞服务连接已断开'
+                }));
+            });
+            
+        } catch (error) {
+            logger.error('连接科大讯飞失败:', error);
+            ws.send(JSON.stringify({
+                action: 'error',
+                desc: '无法连接到科大讯飞服务: ' + error.message
+            }));
+        }
+    };
+    
+    // 处理客户端消息
+    ws.on('message', (message) => {
+        try {
+            const data = JSON.parse(message);
+            
+            if (data.action === 'start') {
+                // 开始转录
+                connectToXfyun();
+            } else if (data.action === 'audio' && xfyunWs && xfyunWs.readyState === WebSocket.OPEN) {
+                // 转发音频数据到科大讯飞
+                const audioMessage = {
+                    common: {
+                        app_id: XFYUN_CONFIG.appId
+                    },
+                    business: {
+                        language: 'zh_cn',
+                        domain: 'iat',
+                        accent: 'mandarin',
+                        vinfo: 1,
+                        vad_eos: 5000
+                    },
+                    data: {
+                        status: data.data.frame_id === 0 ? 0 : 1, // 0: 首帧, 1: 中间帧, 2: 尾帧
+                        format: 'audio/L16;rate=16000',
+                        audio: data.data.audio,
+                        encoding: 'raw'
+                    }
+                };
+                
+                xfyunWs.send(JSON.stringify(audioMessage));
+            } else if (data.action === 'stop' && xfyunWs) {
+                // 发送结束帧
+                const endMessage = {
+                    data: {
+                        status: 2, // 结束帧
+                        format: 'audio/L16;rate=16000',
+                        audio: '',
+                        encoding: 'raw'
+                    }
+                };
+                
+                if (xfyunWs.readyState === WebSocket.OPEN) {
+                    xfyunWs.send(JSON.stringify(endMessage));
+                }
+            }
+            
+        } catch (error) {
+            logger.error('处理客户端消息失败:', error);
+            ws.send(JSON.stringify({
+                action: 'error',
+                desc: '消息处理失败: ' + error.message
+            }));
+        }
+    });
+    
+    ws.on('close', () => {
+        logger.info('🔌 客户端WebSocket连接关闭');
+        if (xfyunWs) {
+            xfyunWs.close();
+        }
+    });
+    
+    ws.on('error', (error) => {
+        logger.error('客户端WebSocket错误:', error);
+        if (xfyunWs) {
+            xfyunWs.close();
+        }
+    });
+});
+
+// 科大讯飞配置状态接口
+app.get('/api/xfyun/status', (req, res) => {
+    res.json({
+        status: 'ok',
+        appId: XFYUN_CONFIG.appId,
+        configured: !!(XFYUN_CONFIG.appId && XFYUN_CONFIG.apiKey),
+        message: '科大讯飞实时语音转写已配置'
+    });
+});
+
+// ==================== 科大讯飞代理功能结束 ====================
 
 // 启动服务器
 const PORT = process.env.PORT || 3001;

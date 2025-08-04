@@ -88,6 +88,12 @@
                         <button class="btn-stop-recording" id="stopRecordBtn" onclick="stopTranscription()" style="display: none;">
                             <i class="fas fa-stop"></i> 停止转录
                         </button>
+                        
+                        <!-- 科大讯飞转录按钮 -->
+                        <button class="btn-xfyun-recording" id="xfyunRecordBtn" onclick="toggleXfyunTranscription()" title="科大讯飞实时转录">
+                            <i class="fas fa-microphone"></i> 科大讯飞转录
+                        </button>
+                        
                         <div class="transcription-status" id="transcriptionStatus">
                             <i class="fas fa-microphone-slash"></i>
                             <span>转录已停止</span>
@@ -400,6 +406,9 @@
     <!-- 主应用脚本 -->
     <script src="app.js"></script>
     
+    <!-- 科大讯飞实时语音转写 -->
+    <script src="xfyun-realtime-transcription.js"></script>
+    
     <script>
         // 初始化转录客户端
         document.addEventListener('DOMContentLoaded', async () => {
@@ -409,6 +418,13 @@
                 console.log('🎤 转录客户端已准备就绪');
             } else {
                 console.warn('⚠️ TranscriptionClient 未找到');
+            }
+            
+            // 初始化科大讯飞转录客户端
+            if (typeof XunfeiRealtimeTranscription !== 'undefined') {
+                console.log('🎤 科大讯飞转录客户端已准备就绪');
+            } else {
+                console.warn('⚠️ 科大讯飞转录客户端未找到');
             }
         });
     </script>
