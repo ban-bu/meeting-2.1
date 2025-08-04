@@ -281,6 +281,10 @@ body {
     overflow: hidden;
 }
 
+.right-sidebar {
+    border-left: 1px solid var(--border-color);
+}
+
 .participants-panel {
     background: var(--bg-primary);
     border-radius: 0;
@@ -300,11 +304,10 @@ body {
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 1; /* 占据剩余空间 */
+    flex: 1; /* 与其他面板平均分配空间 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-top: 1px solid var(--border-color);
     min-height: 0;
 }
 
@@ -464,12 +467,12 @@ body {
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 0 0 auto; /* 根据内容调整高度，不占据剩余空间 */
+    flex: 1; /* 与其他面板平均分配空间 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-left: 1px solid var(--border-color);
-    max-height: 50%; /* 最多占据右侧栏的一半高度 */
+    border-top: 1px solid var(--border-color);
+    min-height: 0;
 }
 
 .participants-panel h3,
@@ -676,11 +679,12 @@ body {
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 1;
+    flex: 1; /* 与其他面板平均分配空间 */
     display: flex;
     flex-direction: column;
-    border-left: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+    overflow: hidden;
+    min-height: 0;
 }
 
 /* 搜索高亮样式 */
