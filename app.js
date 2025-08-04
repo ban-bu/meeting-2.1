@@ -4751,8 +4751,12 @@ let callDuration = null;
 
 // ==================== 转录面板控制函数 ====================
 
-// 显示/隐藏转录面板
+// 转录面板现在固定显示，此函数用于兼容性
 function toggleTranscriptionPanel() {
+    // 转录面板现在固定在右侧栏中，总是可见
+    showToast('转录面板已固定在右侧', 'info');
+    return;
+    
     const panel = document.getElementById('transcriptionPanel');
     const btn = document.getElementById('transcribeBtn');
     
