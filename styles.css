@@ -416,6 +416,26 @@ body {
     font-size: 0.85rem;
 }
 
+/* 科大讯飞转录结果特殊样式 */
+.transcript-item.xfyun-result {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+}
+
+.transcript-item.xfyun-result .service-name {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.transcript-item.xfyun-result .transcript-text {
+    color: #1e40af;
+    font-weight: 500;
+}
+
 .btn-download {
     background: rgba(99, 102, 241, 0.1);
     color: var(--primary-color);

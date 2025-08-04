@@ -221,62 +221,35 @@ class XunfeiRealtimeTranscription {
     
     // 开始录音和转录
     async startRecording() {
-        if (this.isRecording) {
-            console.warn('已在录音中');
-            return;
+        // 暂时禁用科大讯飞转录功能
+        this.showToast('科大讯飞转录功能暂时不可用，正在修复API对接...', 'warning');
+        console.warn('⚠️ 科大讯飞转录功能暂时禁用 - 需要重新实现RTASR API');
+        
+        // 更新UI显示禁用状态
+        const startBtn = document.getElementById('xfyunStartBtn');
+        const stopBtn = document.getElementById('xfyunStopBtn');
+        if (startBtn) {
+            startBtn.disabled = true;
+            startBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> 功能暂时不可用';
         }
         
-        try {
-            // 获取麦克风权限
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 16000,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            });
-            
-            // 创建音频上下文
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 16000
-            });
-            
-            const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-            
-            // 尝试使用AudioWorkletNode，如果不支持则降级到ScriptProcessorNode
-            if (this.audioContext.audioWorklet && typeof this.audioContext.audioWorklet.addModule === 'function') {
-                try {
-                    // 创建AudioWorklet处理器
-                    await this.setupAudioWorklet(source);
-                } catch (error) {
-                    console.warn('AudioWorklet不可用，降级到ScriptProcessorNode:', error);
-                    this.setupScriptProcessor(source);
-                }
-            } else {
-                console.warn('浏览器不支持AudioWorklet，使用ScriptProcessorNode');
-                this.setupScriptProcessor(source);
-            }
-            
-            // 连接到科大讯飞服务
-            if (!this.isConnected) {
-                await this.connect();
-            }
-            
-            this.isRecording = true;
-            this.frameId = 0;
-            
-            console.log('🎙️ 开始科大讯飞实时转录');
-            this.showToast('开始科大讯飞实时转录', 'info');
-            
-            // 更新UI
-            this.updateRecordingUI(true);
-            
-        } catch (error) {
-            console.error('开始录音失败:', error);
-            this.showToast('无法开始录音: ' + error.message, 'error');
-        }
+        return;
+
+        /* 
+        TODO: 需要完全重新实现科大讯飞RTASR API
+        
+        正确的实现需要：
+        1. 直接连接到 ws://rtasr.xfyun.cn/v1/ws 
+        2. 使用正确的appId和apiKey签名认证算法
+        3. 发送binary PCM数据而不是JSON格式
+        4. 处理科大讯飞的实际返回格式
+        5. 遵循科大讯飞的实时转写协议规范
+        
+        当前实现的问题：
+        - 使用了不正确的WebSocket代理
+        - 数据格式不匹配
+        - 认证方式错误
+        */
     }
     
     // 停止录音
@@ -362,7 +335,10 @@ class XunfeiRealtimeTranscription {
                 }
             };
             
-            console.log(`📤 发送音频帧 #${this.frameId-1}, 大小: ${base64Audio.length} bytes`);
+            // 只记录每100帧的统计
+            if ((this.frameId-1) % 100 === 0) {
+                console.log(`📤 发送音频帧 #${this.frameId-1}, 累计发送: ${Math.floor((this.frameId-1)/100) * 100} 帧`);
+            }
             this.websocket.send(JSON.stringify(message));
             
         } catch (error) {
@@ -444,7 +420,7 @@ class XunfeiRealtimeTranscription {
         
         this.processor.port.onmessage = (event) => {
             if (event.data.type === 'audioData' && this.isRecording && this.isConnected) {
-                console.log('🎵 AudioWorklet收到音频数据，长度:', event.data.data.length);
+                // 减少日志输出
                 this.sendAudioData(event.data.data);
             }
         };
