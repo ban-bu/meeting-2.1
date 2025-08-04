@@ -181,19 +181,24 @@ class XfyunOfficialRTASR {
         }
 
         if (data.cn.st.type == 0) {
-            // 最终识别结果 - 只有最终结果才添加到聊天
+            // 最终识别结果 - 添加到实时记录框
             this.resultText += resultTextTemp;
             this.resultTextTemp = "";
             console.log('✅ 最终结果:', resultTextTemp);
             
-            // 只有最终结果才更新显示到聊天界面
+            // 只有最终结果才添加到实时记录框
             if (resultTextTemp.trim()) {
                 this.updateTranscriptDisplay(resultTextTemp);
             }
         } else {
-            // 临时结果 - 仅用于控制台调试，不显示在界面
+            // 临时结果 - 显示实时预览
             this.resultTextTemp = resultTextTemp;
             console.log('🔄 临时结果:', resultTextTemp);
+            
+            // 显示临时结果的实时预览
+            if (resultTextTemp.trim()) {
+                this.updatePartialTranscription(resultTextTemp);
+            }
         }
     }
 
@@ -217,7 +222,9 @@ class XfyunOfficialRTASR {
             // 清空之前的结果
             this.resultText = "";
             this.resultTextTemp = "";
-            this.updateTranscriptDisplay("");
+            
+            // 清空实时记录框的临时预览（但保留之前的转录内容）
+            this.clearPartialTranscription();
             
             // 开始录音，设置参数
             this.recorder.start({
@@ -250,6 +257,9 @@ class XfyunOfficialRTASR {
         } catch (error) {
             console.error('❌ 停止录音失败:', error);
         }
+        
+        // 清除临时预览，只保留最终结果
+        this.clearPartialTranscription();
         
         this.isRecording = false;
         this.disconnect();
@@ -325,7 +335,7 @@ class XfyunOfficialRTASR {
         }
     }
 
-    // 更新转录文本显示
+    // 更新转录文本显示 - 使用与Assembly AI相同的实时记录框
     updateTranscriptDisplay(text) {
         if (!text || text.trim() === '') {
             return;
@@ -333,64 +343,150 @@ class XfyunOfficialRTASR {
 
         console.log('📝 科大讯飞转录文本:', text);
         
-        // 创建转录消息，与Assembly AI相同的格式
-        const transcriptionMessage = {
-            type: 'transcription',
-            text: `🎙️ [科大讯飞转录] ${text}`,
-            author: window.currentUsername || '科大讯飞转录',
-            userId: window.currentUserId || 'xfyun-transcription-system',
-            time: new Date().toLocaleTimeString('zh-CN', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }),
-            timestamp: Date.now(),
-            isTranscription: true,
-            isXfyunTranscription: true,
-            language: 'zh_cn'
-        };
-        
-        // 使用与Assembly AI相同的消息添加机制
-        if (typeof addMessage === 'function') {
-            addMessage('transcription', transcriptionMessage.text, transcriptionMessage.author, transcriptionMessage.userId);
-        } else if (typeof window.messages !== 'undefined' && typeof renderMessage === 'function') {
-            // 兼容现有消息系统
-            window.messages.push(transcriptionMessage);
-            renderMessage(transcriptionMessage);
-            if (typeof scrollToBottom === 'function') {
-                scrollToBottom();
-            }
-            
-            // 发送给其他用户
-            if (window.isRealtimeEnabled && window.realtimeClient) {
-                window.realtimeClient.sendMessage(transcriptionMessage);
-            }
-        } else {
-            console.warn('📝 无法添加转录消息到聊天界面，消息函数不可用');
-        }
+        // 使用与Assembly AI完全相同的机制：添加到实时记录框
+        this.addFinalTranscription(text);
+    }
 
-        // 添加到转录客户端的全文文本，以便下载功能使用
-        if (window.transcriptionClient && typeof window.transcriptionClient.fullTranscriptionText !== 'undefined') {
-            // 添加到累积转录文本（与Assembly AI相同的方式）
+    // 添加最终转录结果到实时记录框（与Assembly AI相同的方法）
+    addFinalTranscription(text) {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) {
+            console.warn('📝 找不到transcriptionHistory元素');
+            return;
+        }
+        
+        const cleanText = text.trim();
+        if (!cleanText) {
+            console.log('🚫 跳过空白的转录结果');
+            return;
+        }
+        
+        // 避免重复：检查是否已经包含在全文中
+        if (window.transcriptionClient && window.transcriptionClient.fullTranscriptionText.includes(cleanText)) {
+            console.log('🚫 跳过重复的转录结果:', cleanText);
+            return;
+        }
+        
+        // 添加到转录客户端的累积转录文本
+        if (window.transcriptionClient) {
             if (window.transcriptionClient.fullTranscriptionText.length > 0) {
                 window.transcriptionClient.fullTranscriptionText += ' ';
             }
-            window.transcriptionClient.fullTranscriptionText += text;
-            
-            // 显示下载按钮
-            const downloadBtn = document.getElementById('downloadBtn');
-            if (downloadBtn && window.transcriptionClient.fullTranscriptionText.length > 0) {
-                downloadBtn.style.display = 'block';
-            }
-            
-            console.log('✅ 科大讯飞转录已添加到全文:', text);
-            console.log('📝 当前全文长度:', window.transcriptionClient.fullTranscriptionText.length);
-        } else {
-            console.warn('📝 transcriptionClient不可用，无法添加到下载内容');
+            window.transcriptionClient.fullTranscriptionText += cleanText;
         }
+        
+        // 更新实时记录框显示
+        this.updateCumulativeDisplay();
+        
+        // 显示下载按钮
+        const downloadBtn = document.getElementById('downloadBtn');
+        if (downloadBtn && window.transcriptionClient && window.transcriptionClient.fullTranscriptionText.length > 0) {
+            downloadBtn.style.display = 'block';
+        }
+        
+        console.log('✅ 科大讯飞转录结果已添加:', cleanText);
+        console.log('📝 当前全文长度:', window.transcriptionClient ? window.transcriptionClient.fullTranscriptionText.length : 0);
+    }
 
-        // 显示成功提示（仅最终结果）
-        if (this.resultTextTemp === '') {
-            this.showToast('科大讯飞转录完成', 'success');
+    // 更新累积显示（与Assembly AI相同的方法）
+    updateCumulativeDisplay() {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
+        
+        // 清除占位符
+        const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        
+        // 获取或创建累积转录容器
+        let cumulativeDiv = document.getElementById('cumulativeTranscription');
+        if (!cumulativeDiv) {
+            cumulativeDiv = document.createElement('div');
+            cumulativeDiv.id = 'cumulativeTranscription';
+            cumulativeDiv.className = 'cumulative-transcription';
+            cumulativeDiv.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 14px;
+                line-height: 1.8;
+                color: #374151;
+                min-height: 100px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                border: 2px solid #3b82f6;
+                border-left: 4px solid #3b82f6;
+                background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            `;
+            transcriptionHistory.appendChild(cumulativeDiv);
+        }
+        
+        // 显示全部累积内容
+        if (window.transcriptionClient && window.transcriptionClient.fullTranscriptionText) {
+            cumulativeDiv.textContent = window.transcriptionClient.fullTranscriptionText;
+        }
+        
+        transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
+    }
+
+    // 显示临时结果预览（用于实时预览）
+    updatePartialTranscription(text) {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
+        
+        // 清除占位符
+        const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'none';
+        }
+        
+        // 获取或创建累积转录容器
+        let cumulativeDiv = document.getElementById('cumulativeTranscription');
+        if (!cumulativeDiv) {
+            cumulativeDiv = document.createElement('div');
+            cumulativeDiv.id = 'cumulativeTranscription';
+            cumulativeDiv.className = 'cumulative-transcription';
+            cumulativeDiv.style.cssText = `
+                background: white;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 14px;
+                line-height: 1.8;
+                color: #374151;
+                min-height: 100px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                border: 2px solid #3b82f6;
+                border-left: 4px solid #3b82f6;
+                background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            `;
+            transcriptionHistory.appendChild(cumulativeDiv);
+        }
+        
+        // 更新实时预览：显示已确认的文本 + 当前正在转录的文本
+        const currentPreview = text.trim();
+        if (currentPreview) {
+            const finalText = window.transcriptionClient ? window.transcriptionClient.fullTranscriptionText : '';
+            const previewHtml = finalText + '<span class="current-preview" style="color: #2563eb; background: rgba(37, 99, 235, 0.15); padding: 2px 4px; border-radius: 3px; animation: pulse 1.5s infinite;">' + currentPreview + '</span>';
+            cumulativeDiv.innerHTML = previewHtml;
+        } else {
+            cumulativeDiv.textContent = window.transcriptionClient ? window.transcriptionClient.fullTranscriptionText : '';
+        }
+        
+        transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
+    }
+
+    // 清除临时预览
+    clearPartialTranscription() {
+        const transcriptionHistory = document.getElementById('transcriptionHistory');
+        if (!transcriptionHistory) return;
+        
+        // 获取累积转录容器
+        const cumulativeDiv = document.getElementById('cumulativeTranscription');
+        if (cumulativeDiv && window.transcriptionClient) {
+            // 只显示已确认的最终文本，清除临时预览
+            cumulativeDiv.textContent = window.transcriptionClient.fullTranscriptionText;
         }
     }
 
