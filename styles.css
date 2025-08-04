@@ -91,7 +91,7 @@ body {
 .main-content {
     flex: 1;
     display: grid;
-    grid-template-columns: 250px 1fr 300px 250px;
+    grid-template-columns: 250px 1fr 350px;
     grid-template-rows: 1fr;
     gap: 0;
     max-width: none;
@@ -294,18 +294,18 @@ body {
     min-height: 0;
 }
 
-/* 右侧转录面板样式 */
-.right-transcription-panel {
+/* 转录面板在右侧栏内的样式 */
+.transcription-panel {
     background: var(--bg-primary);
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
+    flex: 1; /* 占据剩余空间 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-left: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
     min-height: 0;
-    height: 100%;
 }
 
 .transcription-header {
@@ -327,30 +327,30 @@ body {
     gap: 0.5rem;
 }
 
-/* 右侧转录面板专用样式 */
-.right-transcription-panel .transcription-header h3 {
+/* 转录面板在右侧栏内的专用样式 */
+.transcription-panel .transcription-header h3 {
     font-size: 0.95rem;
 }
 
-.right-transcription-panel .transcription-controls {
+.transcription-panel .transcription-controls {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     margin-bottom: 1rem;
 }
 
-.right-transcription-panel .btn-start-recording,
-.right-transcription-panel .btn-stop-recording {
+.transcription-panel .btn-start-recording,
+.transcription-panel .btn-stop-recording {
     padding: 0.6rem 0.8rem;
     font-size: 0.85rem;
 }
 
-.right-transcription-panel .transcription-status {
+.transcription-panel .transcription-status {
     padding: 0.4rem 0.6rem;
     font-size: 0.75rem;
 }
 
-.right-transcription-panel .transcription-history {
+.transcription-panel .transcription-history {
     font-size: 0.85rem;
     line-height: 1.6;
 }
@@ -464,11 +464,12 @@ body {
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 1;
+    flex: 0 0 auto; /* 根据内容调整高度，不占据剩余空间 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
     border-left: 1px solid var(--border-color);
+    max-height: 50%; /* 最多占据右侧栏的一半高度 */
 }
 
 .participants-panel h3,

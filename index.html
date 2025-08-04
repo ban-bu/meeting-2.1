@@ -207,36 +207,36 @@
                         <i class="fas fa-download"></i> 导出总结
                     </button>
                 </div>
-            </div>
-            
-            <!-- 实时转录面板 -->
-            <div class="right-transcription-panel">
-                <div class="transcription-header">
-                    <h3><i class="fas fa-closed-captioning"></i> 实时转录</h3>
-                    <div class="transcription-actions">
-                        <button class="btn-download" id="downloadBtn" onclick="downloadTranscription()" title="下载转录文档" style="display: none;">
-                            <i class="fas fa-download"></i>
+                
+                <!-- 实时转录面板 -->
+                <div class="transcription-panel">
+                    <div class="transcription-header">
+                        <h3><i class="fas fa-closed-captioning"></i> 实时转录</h3>
+                        <div class="transcription-actions">
+                            <button class="btn-download" id="downloadBtn" onclick="downloadTranscription()" title="下载转录文档" style="display: none;">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="transcription-controls">
+                        <button class="btn-start-recording" id="startRecordBtn" onclick="startTranscription()">
+                            <i class="fas fa-microphone"></i> 开始转录
                         </button>
+                        <button class="btn-stop-recording" id="stopRecordBtn" onclick="stopTranscription()" style="display: none;">
+                            <i class="fas fa-stop"></i> 停止转录
+                        </button>
+                        <div class="transcription-status" id="transcriptionStatus">
+                            <i class="fas fa-microphone-slash"></i>
+                            <span>转录已停止</span>
+                        </div>
                     </div>
-                </div>
-                <div class="transcription-controls">
-                    <button class="btn-start-recording" id="startRecordBtn" onclick="startTranscription()">
-                        <i class="fas fa-microphone"></i> 开始转录
-                    </button>
-                    <button class="btn-stop-recording" id="stopRecordBtn" onclick="stopTranscription()" style="display: none;">
-                        <i class="fas fa-stop"></i> 停止转录
-                    </button>
-                    <div class="transcription-status" id="transcriptionStatus">
-                        <i class="fas fa-microphone-slash"></i>
-                        <span>转录已停止</span>
-                    </div>
-                </div>
-                <div class="transcription-content" id="transcriptionContent">
-                    <div class="transcription-history" id="transcriptionHistory">
-                        <div class="transcription-placeholder">
-                            <i class="fas fa-info-circle"></i>
-                            <p>点击"开始转录"按钮开始语音转录</p>
-                            <p>支持中英文实时转录</p>
+                    <div class="transcription-content" id="transcriptionContent">
+                        <div class="transcription-history" id="transcriptionHistory">
+                            <div class="transcription-placeholder">
+                                <i class="fas fa-info-circle"></i>
+                                <p>点击"开始转录"按钮开始语音转录</p>
+                                <p>支持中英文实时转录</p>
+                            </div>
                         </div>
                     </div>
                 </div>
