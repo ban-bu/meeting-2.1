@@ -436,6 +436,36 @@ body {
     font-weight: 500;
 }
 
+/* 科大讯飞转录消息样式 */
+.message.transcription[data-author*="科大讯飞"] {
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border-left: 4px solid #3b82f6;
+}
+
+.message.transcription[data-author*="科大讯飞"] .message-author {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.message.transcription[data-author*="科大讯飞"] .message-text {
+    color: #1e40af;
+}
+
+/* Assembly AI转录消息样式 */
+.message.transcription[data-author*="语音转录"] {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border-left: 4px solid #16a34a;
+}
+
+.message.transcription[data-author*="语音转录"] .message-author {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.message.transcription[data-author*="语音转录"] .message-text {
+    color: #166534;
+}
+
 .btn-download {
     background: rgba(99, 102, 241, 0.1);
     color: var(--primary-color);

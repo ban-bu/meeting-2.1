@@ -181,18 +181,20 @@ class XfyunOfficialRTASR {
         }
 
         if (data.cn.st.type == 0) {
-            // 最终识别结果
+            // 最终识别结果 - 只有最终结果才添加到聊天
             this.resultText += resultTextTemp;
             this.resultTextTemp = "";
             console.log('✅ 最终结果:', resultTextTemp);
+            
+            // 只有最终结果才更新显示到聊天界面
+            if (resultTextTemp.trim()) {
+                this.updateTranscriptDisplay(resultTextTemp);
+            }
         } else {
-            // 临时结果
+            // 临时结果 - 仅用于控制台调试，不显示在界面
             this.resultTextTemp = resultTextTemp;
             console.log('🔄 临时结果:', resultTextTemp);
         }
-
-        // 更新显示
-        this.updateTranscriptDisplay(this.resultText + this.resultTextTemp);
     }
 
     // 开始录音
@@ -325,29 +327,70 @@ class XfyunOfficialRTASR {
 
     // 更新转录文本显示
     updateTranscriptDisplay(text) {
-        // 更新实时转录结果显示区域
-        const realtimeResults = document.getElementById('realtime-results');
-        if (realtimeResults) {
-            // 创建一个新的转录段落
-            const transcriptItem = document.createElement('div');
-            transcriptItem.className = 'transcript-item xfyun-result';
-            transcriptItem.innerHTML = `
-                <div class="transcript-header">
-                    <span class="service-name">科大讯飞</span>
-                    <span class="timestamp">${new Date().toLocaleTimeString()}</span>
-                </div>
-                <div class="transcript-text">${text}</div>
-            `;
-            
-            // 移除之前的科大讯飞结果，只保留最新的
-            const existingXfyunResults = realtimeResults.querySelectorAll('.xfyun-result');
-            existingXfyunResults.forEach(result => result.remove());
-            
-            // 添加新结果
-            if (text.trim()) {
-                realtimeResults.appendChild(transcriptItem);
-                realtimeResults.scrollTop = realtimeResults.scrollHeight;
+        if (!text || text.trim() === '') {
+            return;
+        }
+
+        console.log('📝 科大讯飞转录文本:', text);
+        
+        // 创建转录消息，与Assembly AI相同的格式
+        const transcriptionMessage = {
+            type: 'transcription',
+            text: `🎙️ [科大讯飞转录] ${text}`,
+            author: window.currentUsername || '科大讯飞转录',
+            userId: window.currentUserId || 'xfyun-transcription-system',
+            time: new Date().toLocaleTimeString('zh-CN', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            }),
+            timestamp: Date.now(),
+            isTranscription: true,
+            isXfyunTranscription: true,
+            language: 'zh_cn'
+        };
+        
+        // 使用与Assembly AI相同的消息添加机制
+        if (typeof addMessage === 'function') {
+            addMessage('transcription', transcriptionMessage.text, transcriptionMessage.author, transcriptionMessage.userId);
+        } else if (typeof window.messages !== 'undefined' && typeof renderMessage === 'function') {
+            // 兼容现有消息系统
+            window.messages.push(transcriptionMessage);
+            renderMessage(transcriptionMessage);
+            if (typeof scrollToBottom === 'function') {
+                scrollToBottom();
             }
+            
+            // 发送给其他用户
+            if (window.isRealtimeEnabled && window.realtimeClient) {
+                window.realtimeClient.sendMessage(transcriptionMessage);
+            }
+        } else {
+            console.warn('📝 无法添加转录消息到聊天界面，消息函数不可用');
+        }
+
+        // 添加到转录客户端的全文文本，以便下载功能使用
+        if (window.transcriptionClient && typeof window.transcriptionClient.fullTranscriptionText !== 'undefined') {
+            // 添加到累积转录文本（与Assembly AI相同的方式）
+            if (window.transcriptionClient.fullTranscriptionText.length > 0) {
+                window.transcriptionClient.fullTranscriptionText += ' ';
+            }
+            window.transcriptionClient.fullTranscriptionText += text;
+            
+            // 显示下载按钮
+            const downloadBtn = document.getElementById('downloadBtn');
+            if (downloadBtn && window.transcriptionClient.fullTranscriptionText.length > 0) {
+                downloadBtn.style.display = 'block';
+            }
+            
+            console.log('✅ 科大讯飞转录已添加到全文:', text);
+            console.log('📝 当前全文长度:', window.transcriptionClient.fullTranscriptionText.length);
+        } else {
+            console.warn('📝 transcriptionClient不可用，无法添加到下载内容');
+        }
+
+        // 显示成功提示（仅最终结果）
+        if (this.resultTextTemp === '') {
+            this.showToast('科大讯飞转录完成', 'success');
         }
     }
 
