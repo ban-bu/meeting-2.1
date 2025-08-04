@@ -83,14 +83,15 @@ class XunfeiRealtimeTranscription {
                 this.isConnected = true;
                 
                 // 发送启动转录命令
-                this.websocket.send(JSON.stringify({
-                    action: 'start'
-                }));
+                const startMessage = { action: 'start' };
+                console.log('📤 发送启动命令:', startMessage);
+                this.websocket.send(JSON.stringify(startMessage));
                 
                 this.showToast('实时转录服务已连接', 'success');
             };
             
             this.websocket.onmessage = (event) => {
+                console.log('📨 收到代理服务器消息:', event.data);
                 this.handleMessage(event.data);
             };
             
@@ -333,6 +334,7 @@ class XunfeiRealtimeTranscription {
     // 发送音频数据
     sendAudioData(audioData) {
         if (!this.websocket || !this.isConnected) {
+            console.warn('⚠️ WebSocket未连接，跳过音频数据发送');
             return;
         }
         
@@ -360,6 +362,7 @@ class XunfeiRealtimeTranscription {
                 }
             };
             
+            console.log(`📤 发送音频帧 #${this.frameId-1}, 大小: ${base64Audio.length} bytes`);
             this.websocket.send(JSON.stringify(message));
             
         } catch (error) {
@@ -441,6 +444,7 @@ class XunfeiRealtimeTranscription {
         
         this.processor.port.onmessage = (event) => {
             if (event.data.type === 'audioData' && this.isRecording && this.isConnected) {
+                console.log('🎵 AudioWorklet收到音频数据，长度:', event.data.data.length);
                 this.sendAudioData(event.data.data);
             }
         };
@@ -509,6 +513,27 @@ function getXfyunTranscriptionStatus() {
         isRecording: window.xfyunTranscription.isRecording,
         isConnected: window.xfyunTranscription.isConnected
     };
+}
+
+function debugXfyunConnection() {
+    console.log('🔧 科大讯飞连接调试信息:');
+    console.log('- 录音状态:', window.xfyunTranscription.isRecording ? '录音中' : '未录音');
+    console.log('- 连接状态:', window.xfyunTranscription.isConnected ? '已连接' : '未连接');
+    console.log('- WebSocket状态:', window.xfyunTranscription.websocket ? 
+        (window.xfyunTranscription.websocket.readyState === 1 ? '打开' : '关闭') : '未创建');
+    console.log('- 音频上下文:', window.xfyunTranscription.audioContext ? '已创建' : '未创建');
+    console.log('- 媒体流:', window.xfyunTranscription.mediaStream ? '已获取' : '未获取');
+    console.log('- 音频处理器:', window.xfyunTranscription.processor ? '已创建' : '未创建');
+    console.log('- 帧ID:', window.xfyunTranscription.frameId);
+    
+    // 测试连接
+    if (window.xfyunTranscription.websocket && window.xfyunTranscription.websocket.readyState === 1) {
+        console.log('📤 发送测试消息...');
+        window.xfyunTranscription.websocket.send(JSON.stringify({
+            action: 'test',
+            message: 'debug_test'
+        }));
+    }
 }
 
 console.log('✅ 科大讯飞实时语音转写模块已加载');

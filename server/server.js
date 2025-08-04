@@ -1725,8 +1725,17 @@ app.ws('/xfyun-proxy', (ws, req) => {
             
             if (data.action === 'start') {
                 // 开始转录
+                logger.info('📤 客户端请求开始转录');
                 connectToXfyun();
-            } else if (data.action === 'audio' && xfyunWs && xfyunWs.readyState === WebSocket.OPEN) {
+            } else if (data.action === 'audio') {
+                if (!xfyunWs) {
+                    logger.warn('⚠️ 科大讯飞连接未建立，忽略音频数据');
+                    return;
+                }
+                if (xfyunWs.readyState !== WebSocket.OPEN) {
+                    logger.warn('⚠️ 科大讯飞连接未打开，状态:', xfyunWs.readyState);
+                    return;
+                }
                 // 转发音频数据到科大讯飞
                 const audioMessage = {
                     common: {
@@ -1747,6 +1756,7 @@ app.ws('/xfyun-proxy', (ws, req) => {
                     }
                 };
                 
+                logger.debug(`📤 转发音频帧到科大讯飞: #${data.data.frame_id}, 状态: ${audioMessage.data.status}`);
                 xfyunWs.send(JSON.stringify(audioMessage));
             } else if (data.action === 'stop' && xfyunWs) {
                 // 发送结束帧
