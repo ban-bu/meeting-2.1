@@ -83,15 +83,18 @@
                     </div>
                     <div class="transcription-controls">
                         <button class="btn-start-recording" id="startRecordBtn" onclick="startTranscription()">
-                            <i class="fas fa-microphone"></i> 开始转录
+                            <i class="fas fa-microphone"></i> Assembly转录
                         </button>
                         <button class="btn-stop-recording" id="stopRecordBtn" onclick="stopTranscription()" style="display: none;">
-                            <i class="fas fa-stop"></i> 停止转录
+                            <i class="fas fa-stop"></i> 停止Assembly转录
                         </button>
                         
                         <!-- 科大讯飞转录按钮 -->
-                        <button class="btn-xfyun-recording" id="xfyunRecordBtn" onclick="toggleXfyunTranscription()" title="科大讯飞实时转录">
+                        <button class="btn-xfyun-recording" id="xfyunStartBtn" onclick="startXfyunTranscription()" title="开始科大讯飞实时转录">
                             <i class="fas fa-microphone"></i> 科大讯飞转录
+                        </button>
+                        <button class="btn-xfyun-stop" id="xfyunStopBtn" onclick="stopXfyunTranscription()" style="display: none;" title="停止科大讯飞转录">
+                            <i class="fas fa-stop"></i> 停止科大讯飞转录
                         </button>
                         
                         <div class="transcription-status" id="transcriptionStatus">
@@ -103,7 +106,7 @@
                         <div class="transcription-history" id="transcriptionHistory">
                             <div class="transcription-placeholder">
                                 <i class="fas fa-info-circle"></i>
-                                <p>点击"开始转录"按钮开始语音转录</p>
+                                <p>点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
                                 <p>支持中英文实时转录</p>
                             </div>
                         </div>

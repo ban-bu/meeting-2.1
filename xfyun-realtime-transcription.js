@@ -243,17 +243,20 @@ class XunfeiRealtimeTranscription {
             });
             
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-            this.processor = this.audioContext.createScriptProcessor(1024, 1, 1);
             
-            this.processor.onaudioprocess = (event) => {
-                if (this.isRecording && this.isConnected) {
-                    const inputData = event.inputBuffer.getChannelData(0);
-                    this.sendAudioData(inputData);
+            // 尝试使用AudioWorkletNode，如果不支持则降级到ScriptProcessorNode
+            if (this.audioContext.audioWorklet && typeof this.audioContext.audioWorklet.addModule === 'function') {
+                try {
+                    // 创建AudioWorklet处理器
+                    await this.setupAudioWorklet(source);
+                } catch (error) {
+                    console.warn('AudioWorklet不可用，降级到ScriptProcessorNode:', error);
+                    this.setupScriptProcessor(source);
                 }
-            };
-            
-            source.connect(this.processor);
-            this.processor.connect(this.audioContext.destination);
+            } else {
+                console.warn('浏览器不支持AudioWorklet，使用ScriptProcessorNode');
+                this.setupScriptProcessor(source);
+            }
             
             // 连接到科大讯飞服务
             if (!this.isConnected) {
@@ -287,6 +290,13 @@ class XunfeiRealtimeTranscription {
             
             // 停止音频处理
             if (this.processor) {
+                if (this.processor.port) {
+                    // AudioWorkletNode
+                    this.processor.port.onmessage = null;
+                } else if (this.processor.onaudioprocess) {
+                    // ScriptProcessorNode
+                    this.processor.onaudioprocess = null;
+                }
                 this.processor.disconnect();
                 this.processor = null;
             }
@@ -359,18 +369,17 @@ class XunfeiRealtimeTranscription {
     
     // 更新录音UI
     updateRecordingUI(isRecording) {
-        const recordBtn = document.getElementById('recordBtn') || document.getElementById('xfyunRecordBtn');
+        const startBtn = document.getElementById('xfyunStartBtn');
+        const stopBtn = document.getElementById('xfyunStopBtn');
         const transcriptionStatus = document.getElementById('transcriptionStatus');
         
-        if (recordBtn) {
+        if (startBtn && stopBtn) {
             if (isRecording) {
-                recordBtn.classList.add('recording');
-                recordBtn.innerHTML = '<i class="fas fa-stop"></i> 停止科大讯飞转录';
-                recordBtn.style.background = '#ef4444';
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'flex';
             } else {
-                recordBtn.classList.remove('recording');
-                recordBtn.innerHTML = '<i class="fas fa-microphone"></i> 开始科大讯飞转录';
-                recordBtn.style.background = '#10b981';
+                startBtn.style.display = 'flex';
+                stopBtn.style.display = 'none';
             }
         }
         
@@ -403,6 +412,65 @@ class XunfeiRealtimeTranscription {
         }
     }
     
+    // 设置AudioWorklet处理器（现代方法）
+    async setupAudioWorklet(source) {
+        // 创建内联的AudioWorklet处理器
+        const workletCode = `
+            class XfyunAudioProcessor extends AudioWorkletProcessor {
+                process(inputs, outputs, parameters) {
+                    const input = inputs[0];
+                    if (input.length > 0) {
+                        const inputData = input[0];
+                        this.port.postMessage({
+                            type: 'audioData',
+                            data: inputData
+                        });
+                    }
+                    return true;
+                }
+            }
+            registerProcessor('xfyun-audio-processor', XfyunAudioProcessor);
+        `;
+        
+        const workletBlob = new Blob([workletCode], { type: 'application/javascript' });
+        const workletUrl = URL.createObjectURL(workletBlob);
+        
+        await this.audioContext.audioWorklet.addModule(workletUrl);
+        
+        this.processor = new AudioWorkletNode(this.audioContext, 'xfyun-audio-processor');
+        
+        this.processor.port.onmessage = (event) => {
+            if (event.data.type === 'audioData' && this.isRecording && this.isConnected) {
+                this.sendAudioData(event.data.data);
+            }
+        };
+        
+        source.connect(this.processor);
+        this.processor.connect(this.audioContext.destination);
+        
+        // 清理URL
+        URL.revokeObjectURL(workletUrl);
+        
+        console.log('✅ 使用AudioWorklet进行音频处理');
+    }
+    
+    // 设置ScriptProcessor处理器（降级方法）
+    setupScriptProcessor(source) {
+        this.processor = this.audioContext.createScriptProcessor(1024, 1, 1);
+        
+        this.processor.onaudioprocess = (event) => {
+            if (this.isRecording && this.isConnected) {
+                const inputData = event.inputBuffer.getChannelData(0);
+                this.sendAudioData(inputData);
+            }
+        };
+        
+        source.connect(this.processor);
+        this.processor.connect(this.audioContext.destination);
+        
+        console.log('⚠️ 使用ScriptProcessorNode进行音频处理（已废弃）');
+    }
+    
     // 断开连接
     disconnect() {
         this.stopRecording();
@@ -420,6 +488,18 @@ class XunfeiRealtimeTranscription {
 window.xfyunTranscription = new XunfeiRealtimeTranscription();
 
 // 暴露给全局使用的函数
+function startXfyunTranscription() {
+    if (!window.xfyunTranscription.isRecording) {
+        window.xfyunTranscription.startRecording();
+    }
+}
+
+function stopXfyunTranscription() {
+    if (window.xfyunTranscription.isRecording) {
+        window.xfyunTranscription.stopRecording();
+    }
+}
+
 function toggleXfyunTranscription() {
     window.xfyunTranscription.toggleRecording();
 }

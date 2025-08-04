@@ -372,7 +372,8 @@ body {
 
 .btn-start-recording,
 .btn-stop-recording,
-.btn-xfyun-recording {
+.btn-xfyun-recording,
+.btn-xfyun-stop {
     background: linear-gradient(135deg, #10b981, #059669);
     color: white;
     border: none;
@@ -388,7 +389,8 @@ body {
     gap: 0.5rem;
 }
 
-.btn-stop-recording {
+.btn-stop-recording,
+.btn-xfyun-stop {
     background: linear-gradient(135deg, #ef4444, #dc2626);
 }
 
@@ -402,12 +404,14 @@ body {
 
 .btn-start-recording:hover,
 .btn-stop-recording:hover,
-.btn-xfyun-recording:hover {
+.btn-xfyun-recording:hover,
+.btn-xfyun-stop:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
 }
 
-.transcription-panel .btn-xfyun-recording {
+.transcription-panel .btn-xfyun-recording,
+.transcription-panel .btn-xfyun-stop {
     padding: 0.6rem 0.8rem;
     font-size: 0.85rem;
 }

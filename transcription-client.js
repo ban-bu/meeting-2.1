@@ -488,7 +488,7 @@ class TranscriptionClient {
                 recordBtn.style.background = '#ef4444';
             } else {
                 recordBtn.classList.remove('recording');
-                recordBtn.innerHTML = '<i class="fas fa-microphone"></i> 开始转录';
+                recordBtn.innerHTML = '<i class="fas fa-microphone"></i> 开始Assembly转录';
                 recordBtn.style.background = '#10b981';
             }
         }
@@ -934,7 +934,7 @@ TranscriptionClient.prototype.toggleRecording = function() {
             const roomId = this.getCurrentRoomId();
             if (!roomId) {
                 console.error('无法获取房间ID，无法启动转录');
-                this.showToast('请先加入房间再开始转录', 'error');
+                                        this.showToast('请先加入房间再开始Assembly转录', 'error');
                 return;
             }
             this.startStreamingMode(roomId);
