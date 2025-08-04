@@ -290,21 +290,21 @@ body {
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 1; /* 恢复为占据剩余空间 */
+    flex: 0 0 40%; /* 固定占据左侧栏40%的高度 */
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color); /* 改为底部边框，分隔转录面板 */
     min-height: 0;
 }
 
-/* 转录面板在右侧栏内的样式 */
+/* 转录面板现在在左侧栏内的样式 */
 .transcription-panel {
     background: var(--bg-primary);
     border-radius: 0;
     box-shadow: none;
     padding: 1rem;
-    flex: 1; /* 与其他面板平均分配空间 */
+    flex: 1; /* 占据左侧栏剩余空间（60%） */
     display: flex;
     flex-direction: column;
     overflow: hidden;
