@@ -116,11 +116,21 @@ class XunfeiRealtimeTranscription {
         // 使用本地代理服务器来解决CORS问题
         const hostname = window.location.hostname;
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const port = window.location.port;
+        
+        console.log('🔗 科大讯飞代理URL检测:', { hostname, protocol, port });
         
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             return `ws://localhost:3001/xfyun-proxy`;
+        } else if (hostname.includes('railway.app') || hostname.includes('up.railway.app')) {
+            // Railway环境使用HTTPS，所以WebSocket应该使用WSS
+            const wsUrl = `wss://${hostname}/xfyun-proxy`;
+            console.log('🚂 Railway环境科大讯飞代理URL:', wsUrl);
+            return wsUrl;
         } else {
-            return `${protocol}//${hostname}/xfyun-proxy`;
+            const wsUrl = `${protocol}//${hostname}${port ? ':' + port : ''}/xfyun-proxy`;
+            console.log('🌐 标准环境科大讯飞代理URL:', wsUrl);
+            return wsUrl;
         }
     }
     

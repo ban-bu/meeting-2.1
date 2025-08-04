@@ -123,33 +123,50 @@ app.use(express.static(path.join(__dirname, '..'), {
     }
 }));
 
-// Socket.IO配置
+// Socket.IO配置 - 针对Railway环境优化
 const io = socketIo(server, {
     cors: {
         origin: (origin, callback) => {
-            // 允许没有origin的请求
-            if (!origin) return callback(null, true);
+            logger.debug(`🔍 Socket.IO CORS检查 - Origin: ${origin}`);
+            
+            // 允许没有origin的请求（移动应用等）
+            if (!origin) {
+                logger.debug('✅ 允许无origin请求');
+                return callback(null, true);
+            }
+            
+            // Railway环境特殊处理
+            if (origin.includes('railway.app') || origin.includes('up.railway.app')) {
+                logger.debug('✅ Railway环境，允许访问');
+                return callback(null, true);
+            }
             
             const isAllowed = allowedOrigins.some(allowedOrigin => {
                 if (allowedOrigin.includes('*')) {
-                    const regex = new RegExp(allowedOrigin.replace('*', '.*'));
+                    const regex = new RegExp(allowedOrigin.replace(/\*/g, '.*'));
                     return regex.test(origin);
                 }
                 return allowedOrigin === origin;
             });
             
-            if (isAllowed || process.env.NODE_ENV === 'development') {
+            if (isAllowed || process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'production') {
+                logger.debug('✅ CORS检查通过');
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                logger.warn(`❌ CORS blocked origin: ${origin}`);
+                callback(new Error(`Not allowed by CORS: ${origin}`));
             }
         },
         methods: ['GET', 'POST'],
         credentials: true
     },
     maxHttpBufferSize: 1e7, // 10MB
-    transports: ['websocket', 'polling'], // 支持多种传输方式
-    allowEIO3: true // 向后兼容
+    transports: ['polling', 'websocket'], // Railway环境优先使用polling
+    allowEIO3: true, // 向后兼容
+    pingTimeout: 60000, // 60秒
+    pingInterval: 25000, // 25秒
+    upgradeTimeout: 30000, // 30秒升级超时
+    allowUpgrades: true
 });
 
 // MongoDB连接

@@ -203,13 +203,39 @@ class RealtimeClient {
         
         this.isReconnecting = true;
         
-        this.socket = io(this.serverUrl, {
-            transports: ['websocket', 'polling'],
-            timeout: 15000, // 增加超时时间
+        console.log('🔗 尝试连接到服务器:', this.serverUrl);
+        console.log('🌍 当前环境信息:', {
+            hostname: window.location.hostname,
+            protocol: window.location.protocol,
+            port: window.location.port,
+            isRailway: this.isRailway,
+            serverUrl: this.serverUrl
+        });
+        
+        // Railway环境使用特殊配置
+        const socketConfig = {
+            timeout: 30000, // 增加超时时间到30秒，Railway环境较慢
             reconnection: false, // 禁用自动重连，使用自定义重连逻辑
             reconnectionAttempts: 0,
-            reconnectionDelay: 0
-        });
+            reconnectionDelay: 0,
+            forceNew: true, // 强制创建新连接
+            upgrade: true,
+            rememberUpgrade: false
+        };
+        
+        if (this.isRailway) {
+            // Railway环境优先使用polling，然后升级到WebSocket
+            socketConfig.transports = ['polling', 'websocket'];
+            socketConfig.upgrade = true;
+            socketConfig.rememberUpgrade = true;
+            console.log('🚂 Railway环境：使用polling优先的传输方式');
+        } else {
+            // 其他环境使用WebSocket优先
+            socketConfig.transports = ['websocket', 'polling'];
+            console.log('🌐 标准环境：使用WebSocket优先的传输方式');
+        }
+        
+        this.socket = io(this.serverUrl, socketConfig);
         
         this.setupSocketEvents();
     }
@@ -255,7 +281,19 @@ class RealtimeClient {
         });
         
         this.socket.on('connect_error', (error) => {
-            console.error('连接错误:', error);
+            console.error('❌ Socket.IO连接错误:', error);
+            console.error('❌ 错误详情:', {
+                message: error.message,
+                description: error.description,
+                context: error.context,
+                type: error.type
+            });
+            console.error('❌ 服务器URL:', this.serverUrl);
+            console.error('❌ 环境信息:', {
+                hostname: window.location.hostname,
+                protocol: window.location.protocol,
+                isRailway: this.isRailway
+            });
             this.isReconnecting = false;
             this.handleConnectionError(error);
         });
@@ -584,6 +622,35 @@ class RealtimeClient {
         if (this.localMode) return 'local';
         if (this.isConnected) return 'online';
         return 'offline';
+    }
+    
+    // 测试连接状态
+    testConnection() {
+        console.log('🔧 测试Socket.IO连接状态...');
+        console.log('连接信息:', {
+            serverUrl: this.serverUrl,
+            isConnected: this.isConnected,
+            socketId: this.socket?.id,
+            socketConnected: this.socket?.connected,
+            transport: this.socket?.io?.engine?.transport?.name,
+            isRailway: this.isRailway,
+            environment: {
+                hostname: window.location.hostname,
+                protocol: window.location.protocol,
+                port: window.location.port
+            }
+        });
+        
+        if (this.socket) {
+            console.log('Socket状态:', {
+                connected: this.socket.connected,
+                disconnected: this.socket.disconnected,
+                id: this.socket.id,
+                transport: this.socket.io?.engine?.transport?.name
+            });
+        }
+        
+        return this.isConnected;
     }
     
     // 清理资源

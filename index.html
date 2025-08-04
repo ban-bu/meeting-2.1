@@ -426,6 +426,32 @@
             } else {
                 console.warn('⚠️ 科大讯飞转录客户端未找到');
             }
+            
+            // 添加调试功能到全局
+            window.debugConnection = function() {
+                console.log('🔧 开始连接调试...');
+                if (window.realtimeClient) {
+                    return window.realtimeClient.testConnection();
+                } else {
+                    console.error('❌ 实时客户端未初始化');
+                    return false;
+                }
+            };
+            
+            window.testSocketIO = function() {
+                console.log('🧪 测试Socket.IO加载状态...');
+                console.log('Socket.IO库:', typeof io !== 'undefined' ? '✅ 已加载' : '❌ 未加载');
+                if (typeof io !== 'undefined') {
+                    console.log('Socket.IO版本:', io.version || '未知');
+                }
+                
+                if (window.realtimeClient && window.realtimeClient.socket) {
+                    console.log('当前连接状态:', window.realtimeClient.socket.connected);
+                    console.log('传输方式:', window.realtimeClient.socket.io?.engine?.transport?.name);
+                }
+            };
+            
+            console.log('💡 调试提示: 使用 debugConnection() 测试连接，使用 testSocketIO() 检查Socket.IO状态');
         });
     </script>
 </body>
