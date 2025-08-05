@@ -2204,12 +2204,20 @@ function setupRealtimeClient() {
         
         // 转录事件处理
         onTranscriptionStatusChange: (data) => {
-            console.log('转录状态变化:', data);
+            console.log('📝 转录状态变化:', data);
             handleTranscriptionStatusChange(data);
         },
         
         onTranscriptionResult: (data) => {
-            console.log('收到转录结果:', data);
+            console.log('📝 收到转录结果:', data);
+            console.log('📝 转录结果详细信息:', {
+                type: data.type,
+                userId: data.userId,
+                username: data.username,
+                result: data.result,
+                isPartial: data.isPartial,
+                timestamp: data.timestamp
+            });
             handleTranscriptionResult(data);
         },
         

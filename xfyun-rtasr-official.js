@@ -527,17 +527,31 @@ class XfyunOfficialRTASR {
     // 发送转录结果到服务器同步
     sendTranscriptionResult(result, isPartial) {
         if (window.realtimeClient && typeof roomId !== 'undefined' && typeof currentUserId !== 'undefined' && typeof currentUsername !== 'undefined') {
-            window.realtimeClient.sendXfyunTranscriptionResult({
+            const transcriptionData = {
                 roomId: roomId,
                 userId: currentUserId,
                 username: currentUsername,
                 result: result,
                 isPartial: isPartial,
                 timestamp: new Date().toISOString()
-            });
-            console.log(`📡 已发送转录结果: ${result.substring(0, 50)}... (临时: ${isPartial})`);
+            };
+            
+            console.log('📡 准备发送转录结果:', transcriptionData);
+            console.log('📡 实时客户端连接状态:', window.realtimeClient.isConnected);
+            
+            const sendResult = window.realtimeClient.sendXfyunTranscriptionResult(transcriptionData);
+            
+            if (sendResult) {
+                console.log(`📡 已发送转录结果: ${result.substring(0, 50)}... (临时: ${isPartial})`);
+            } else {
+                console.error('❌ 发送转录结果失败 - 连接未建立');
+            }
         } else {
-            console.warn('⚠️ 无法发送转录结果：缺少必要参数或实时客户端未连接');
+            console.warn('⚠️ 无法发送转录结果：');
+            console.warn('- realtimeClient存在:', !!window.realtimeClient);
+            console.warn('- roomId存在:', typeof roomId !== 'undefined', roomId);
+            console.warn('- currentUserId存在:', typeof currentUserId !== 'undefined', currentUserId);
+            console.warn('- currentUsername存在:', typeof currentUsername !== 'undefined', currentUsername);
         }
     }
 

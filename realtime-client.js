@@ -422,14 +422,20 @@ class RealtimeClient {
         
         // 转录事件
         this.socket.on('transcriptionStatusChange', (data) => {
+            console.log('🔧 realtime-client 收到 transcriptionStatusChange:', data);
             if (this.onTranscriptionStatusChange) {
                 this.onTranscriptionStatusChange(data);
+            } else {
+                console.warn('⚠️ onTranscriptionStatusChange 回调未设置');
             }
         });
         
         this.socket.on('transcriptionResult', (data) => {
+            console.log('🔧 realtime-client 收到 transcriptionResult:', data);
             if (this.onTranscriptionResult) {
                 this.onTranscriptionResult(data);
+            } else {
+                console.warn('⚠️ onTranscriptionResult 回调未设置');
             }
         });
     }
