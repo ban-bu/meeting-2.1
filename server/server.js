@@ -1026,6 +1026,56 @@ io.on('connection', (socket) => {
             logger.debug(`⚠️ 未找到目标用户 ${targetUserId} 的socket连接`);
         }
     });
+    
+    // 科大讯飞转录事件
+    socket.on('xfyunTranscriptionStart', (data) => {
+        const { roomId, userId, username } = data;
+        logger.info(`🎤 用户 ${username} 开始科大讯飞转录`);
+        
+        // 通知房间内其他用户有人开始转录
+        socket.to(roomId).emit('transcriptionStatusChange', {
+            action: 'start',
+            type: 'xfyun',
+            userId,
+            username,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
+    socket.on('xfyunTranscriptionStop', (data) => {
+        const { roomId, userId, username } = data;
+        logger.info(`🎤 用户 ${username} 停止科大讯飞转录`);
+        
+        // 通知房间内其他用户转录已停止
+        socket.to(roomId).emit('transcriptionStatusChange', {
+            action: 'stop',
+            type: 'xfyun',
+            userId,
+            username,
+            timestamp: new Date().toISOString()
+        });
+    });
+    
+    socket.on('xfyunTranscriptionResult', (data) => {
+        const { roomId, userId, username, result, isPartial, timestamp } = data;
+        
+        logger.info(`📡 收到转录结果: ${result} (来自: ${username}, 临时: ${isPartial})`);
+        
+        // 广播转录结果到房间内所有用户（包括发送者）
+        const broadcastData = {
+            type: 'xfyun',
+            userId,
+            username,
+            result,
+            isPartial,
+            timestamp,
+            roomId
+        };
+        
+        io.to(roomId).emit('transcriptionResult', broadcastData);
+        
+        logger.info(`📤 转录结果已广播到房间 ${roomId}: ${result.substring(0, 50)}... (接收者数量: ${io.sockets.adapter.rooms.get(roomId)?.size || 0})`);
+    });
 });
 
 // API路由

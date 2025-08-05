@@ -42,13 +42,25 @@ class XfyunOfficialRTASR {
             this.recorder.onFrameRecorded = ({ isLastFrame, frameBuffer }) => {
                 if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                     // 发送音频数据到科大讯飞
-                    this.websocket.send(new Int8Array(frameBuffer));
+                    const audioData = new Int8Array(frameBuffer);
+                    console.log('🎵 发送音频数据:', {
+                        isLastFrame: isLastFrame,
+                        bufferLength: frameBuffer.byteLength,
+                        audioDataLength: audioData.length,
+                        firstFewBytes: Array.from(audioData.slice(0, 10)),
+                        websocketState: this.websocket.readyState
+                    });
+                    
+                    this.websocket.send(audioData);
                     
                     if (isLastFrame) {
                         // 发送结束标志
+                        console.log('🏁 发送结束标志');
                         this.websocket.send('{"end": true}');
                         this.changeBtnStatus("CLOSING");
                     }
+                } else {
+                    console.warn('❌ WebSocket未连接，无法发送音频数据');
                 }
             };
 
@@ -71,16 +83,32 @@ class XfyunOfficialRTASR {
             throw new Error('缺少必要的API密钥配置');
         }
 
+        // 检查加密库是否可用
+        console.log('🔐 检查加密库:');
+        console.log('- hex_md5 可用:', typeof hex_md5 !== 'undefined');
+        console.log('- CryptoJSNew 可用:', typeof CryptoJSNew !== 'undefined');
+        console.log('- CryptoJS 可用:', typeof CryptoJS !== 'undefined');
+
         // 科大讯飞实时语音转写接口地址
         const url = "wss://rtasr.xfyun.cn/v1/ws";
         const appId = this.APPID;
         const secretKey = this.API_KEY;
         const ts = Math.floor(new Date().getTime() / 1000);
         
+        console.log('🔐 签名生成参数:');
+        console.log('- appId:', appId);
+        console.log('- secretKey:', secretKey.substring(0, 8) + '...');
+        console.log('- timestamp:', ts);
+        
         // 生成签名
         const signa = hex_md5(appId + ts);
+        console.log('- MD5签名:', signa);
+        
         const signatureSha = CryptoJSNew.HmacSHA1(signa, secretKey);
+        console.log('- HMAC-SHA1:', signatureSha.toString());
+        
         const signature = encodeURIComponent(CryptoJS.enc.Base64.stringify(signatureSha));
+        console.log('- Base64编码签名:', signature);
         
         const wsUrl = `${url}?appid=${appId}&ts=${ts}&signa=${signature}`;
         console.log('🔗 科大讯飞WebSocket URL:', wsUrl);
@@ -140,8 +168,9 @@ class XfyunOfficialRTASR {
     // 处理科大讯飞返回的消息
     handleMessage(data) {
         try {
+            console.log('📨 收到原始消息:', data);
             const jsonData = JSON.parse(data);
-            console.log('📨 收到科大讯飞消息:', jsonData);
+            console.log('📨 解析后的科大讯飞消息:', jsonData);
 
             if (jsonData.action == "started") {
                 // 握手成功
@@ -150,55 +179,99 @@ class XfyunOfficialRTASR {
                 
             } else if (jsonData.action == "result") {
                 // 转写结果
-                const resultData = JSON.parse(jsonData.data);
-                console.log('📝 转写结果:', resultData);
-                
-                this.processTranscriptionResult(resultData);
+                console.log('📝 收到转写结果，原始data:', jsonData.data);
+                try {
+                    const resultData = JSON.parse(jsonData.data);
+                    console.log('📝 解析后的转写结果:', resultData);
+                    this.processTranscriptionResult(resultData);
+                } catch (parseError) {
+                    console.error('❌ 解析转写结果失败:', parseError);
+                    console.error('❌ 原始data内容:', jsonData.data);
+                }
                 
             } else if (jsonData.action == "error") {
                 // 连接发生错误
                 console.error('❌ 科大讯飞服务错误:', jsonData);
                 this.showToast(`科大讯飞错误: ${jsonData.desc}`, 'error');
+            } else {
+                console.log('📨 收到未知类型的消息:', jsonData);
             }
         } catch (error) {
             console.error('❌ 处理消息失败:', error);
+            console.error('❌ 原始消息内容:', data);
         }
     }
 
     // 处理转写结果
     processTranscriptionResult(data) {
+        console.log('🔍 开始处理转写结果，输入数据:', data);
+        
         let resultTextTemp = "";
+        
+        // 检查数据结构
+        console.log('🔍 检查数据结构:');
+        console.log('- data.cn 存在:', !!data.cn);
+        if (data.cn) {
+            console.log('- data.cn.st 存在:', !!data.cn.st);
+            if (data.cn.st) {
+                console.log('- data.cn.st.rt 存在:', !!data.cn.st.rt);
+                console.log('- data.cn.st.type:', data.cn.st.type);
+            }
+        }
         
         // 解析科大讯飞的结果格式
         if (data.cn && data.cn.st && data.cn.st.rt) {
-            data.cn.st.rt.forEach((sentence) => {
-                sentence.ws.forEach((word) => {
-                    word.cw.forEach((char) => {
-                        resultTextTemp += char.w;
+            console.log('🔍 开始解析rt数据，rt长度:', data.cn.st.rt.length);
+            data.cn.st.rt.forEach((sentence, sentenceIndex) => {
+                console.log(`🔍 处理句子 ${sentenceIndex}:`, sentence);
+                if (sentence.ws) {
+                    sentence.ws.forEach((word, wordIndex) => {
+                        console.log(`🔍 处理词语 ${sentenceIndex}-${wordIndex}:`, word);
+                        if (word.cw) {
+                            word.cw.forEach((char, charIndex) => {
+                                console.log(`🔍 处理字符 ${sentenceIndex}-${wordIndex}-${charIndex}:`, char);
+                                resultTextTemp += char.w;
+                            });
+                        }
                     });
-                });
+                }
             });
+        } else {
+            console.warn('❌ 数据结构不匹配预期格式');
         }
 
-        if (data.cn.st.type == 0) {
-            // 最终识别结果 - 添加到实时记录框并同步到所有用户
-            this.resultText += resultTextTemp;
-            this.resultTextTemp = "";
-            console.log('✅ 最终结果:', resultTextTemp);
-            
-            // 最终结果同步到所有用户
-            if (resultTextTemp.trim()) {
-                this.sendTranscriptionResult(resultTextTemp, false);
+        console.log('🔍 解析出的文本:', resultTextTemp);
+        console.log('🔍 文本长度:', resultTextTemp.length);
+
+        if (data.cn && data.cn.st) {
+            if (data.cn.st.type == 0) {
+                // 最终识别结果 - 添加到实时记录框并同步到所有用户
+                this.resultText += resultTextTemp;
+                this.resultTextTemp = "";
+                console.log('✅ 最终结果:', resultTextTemp);
+                
+                // 最终结果同步到所有用户
+                if (resultTextTemp.trim()) {
+                    this.sendTranscriptionResult(resultTextTemp, false);
+                    this.updateTranscriptDisplay(resultTextTemp);
+                } else {
+                    console.log('🚫 跳过空的最终结果');
+                }
+            } else {
+                // 临时结果 - 显示实时预览并同步到所有用户
+                this.resultTextTemp = resultTextTemp;
+                console.log('🔄 临时结果:', resultTextTemp);
+                
+                // 临时结果也同步到所有用户
+                if (resultTextTemp.trim()) {
+                    this.sendTranscriptionResult(resultTextTemp, true);
+                    this.updatePartialTranscription(resultTextTemp);
+                } else {
+                    console.log('🚫 跳过空的临时结果');
+                }
             }
         } else {
-            // 临时结果 - 显示实时预览并同步到所有用户
-            this.resultTextTemp = resultTextTemp;
-            console.log('🔄 临时结果:', resultTextTemp);
-            
-            // 临时结果也同步到所有用户
-            if (resultTextTemp.trim()) {
-                this.sendTranscriptionResult(resultTextTemp, true);
-            }
+            console.warn('❌ 无法确定结果类型');
         }
     }
 
@@ -227,10 +300,13 @@ class XfyunOfficialRTASR {
             this.clearPartialTranscription();
             
             // 开始录音，设置参数
-            this.recorder.start({
-                sampleRate: 16000,  // 采样率16kHz
-                frameSize: 1280,    // 帧大小
-            });
+            const recordingConfig = {
+                sampleRate: 16000,  // 采样率16kHz，科大讯飞要求
+                frameSize: 1280,    // 帧大小，每80ms一帧 (16000 * 0.08 = 1280)
+            };
+            
+            console.log('🎙️ 录音配置:', recordingConfig);
+            this.recorder.start(recordingConfig);
             
             this.updateRecordingUI(true);
             this.showToast('开始科大讯飞实时转录', 'success');
@@ -660,7 +736,52 @@ if (typeof window !== 'undefined') {
             console.log('- 录音器:', window.xfyunOfficialRTASR.recorder);
             console.log('- WebSocket:', window.xfyunOfficialRTASR.websocket);
             
+            // 额外的调试信息
+            console.log('🔧 详细调试信息:');
+            console.log('- 当前按钮状态:', window.xfyunOfficialRTASR.btnStatus);
+            console.log('- 是否正在录音:', window.xfyunOfficialRTASR.isRecording);
+            console.log('- 是否已连接:', window.xfyunOfficialRTASR.isConnected);
+            console.log('- APPID:', window.xfyunOfficialRTASR.APPID);
+            console.log('- API_KEY存在:', !!window.xfyunOfficialRTASR.API_KEY);
+            
+            // 检查依赖
+            console.log('🔧 依赖检查:');
+            console.log('- RecorderManager:', typeof RecorderManager !== 'undefined');
+            console.log('- hex_md5:', typeof hex_md5 !== 'undefined');
+            console.log('- CryptoJSNew:', typeof CryptoJSNew !== 'undefined');
+            console.log('- CryptoJS:', typeof CryptoJS !== 'undefined');
+            
+            // 检查DOM元素
+            console.log('🔧 DOM元素检查:');
+            console.log('- transcriptionHistory:', !!document.getElementById('transcriptionHistory'));
+            console.log('- xfyunStartBtn:', !!document.getElementById('xfyunStartBtn'));
+            console.log('- xfyunStopBtn:', !!document.getElementById('xfyunStopBtn'));
+            
             return status;
+        };
+        
+        // 新增：测试音频数据发送的调试函数
+        window.testXfyunAudioSending = function() {
+            console.log('🧪 测试科大讯飞音频数据发送');
+            if (window.xfyunOfficialRTASR && window.xfyunOfficialRTASR.recorder) {
+                console.log('- 录音器存在，测试onFrameRecorded回调');
+                // 模拟一个假的音频帧来测试回调
+                const testFrame = new ArrayBuffer(1280);
+                const testView = new Uint8Array(testFrame);
+                testView.fill(Math.random() * 255); // 填充随机数据
+                
+                if (window.xfyunOfficialRTASR.recorder.onFrameRecorded) {
+                    console.log('- 调用测试音频帧');
+                    window.xfyunOfficialRTASR.recorder.onFrameRecorded({
+                        isLastFrame: false,
+                        frameBuffer: testFrame
+                    });
+                } else {
+                    console.warn('- onFrameRecorded回调不存在');
+                }
+            } else {
+                console.error('- 录音器不存在，无法测试');
+            }
         };
 
         console.log('🏭 科大讯飞官方RTASR模块已加载');

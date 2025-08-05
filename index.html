@@ -414,6 +414,8 @@
     <script src="app.js"></script>
     
     <!-- 科大讯飞实时语音转写 - 官方SDK -->
+    <!-- CryptoJS库 - 科大讯飞签名认证需要 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="hmac-sha256.js"></script>
     <script src="HmacSHA1.js"></script>
     <script src="md5.js"></script>
@@ -436,7 +438,8 @@
             }
             
             // 初始化科大讯飞转录客户端
-            if (typeof XunfeiRealtimeTranscription !== 'undefined') {
+            if (typeof XfyunOfficialRTASR !== 'undefined') {
+                window.xfyunClient = window.xfyunOfficialRTASR;
                 console.log('🎤 科大讯飞转录客户端已准备就绪');
             } else {
                 console.warn('⚠️ 科大讯飞转录客户端未找到');
