@@ -1828,6 +1828,11 @@ function setupRealtimeClient() {
                 window.currentRoomInfo = data.roomInfo;
                 window.isCreator = data.isCreator;
                 console.log('房间信息:', data.roomInfo, '是否创建者:', data.isCreator);
+                
+                // 更新转录按钮状态（创建者状态变化时）
+                if (typeof onCallStatusChange === 'function') {
+                    onCallStatusChange();
+                }
             }
             
             // 智能合并消息列表（优先服务器数据，但保留本地较新的消息）
