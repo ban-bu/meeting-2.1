@@ -252,8 +252,9 @@ class XfyunOfficialRTASR {
                 
                 // 最终结果同步到所有用户
                 if (resultTextTemp.trim()) {
+                    // 只发送到服务器，不直接本地显示（避免重复）
                     this.sendTranscriptionResult(resultTextTemp, false);
-                    this.updateTranscriptDisplay(resultTextTemp);
+                    console.log('📡 已发送最终结果到服务器');
                 } else {
                     console.log('🚫 跳过空的最终结果');
                 }
@@ -264,8 +265,9 @@ class XfyunOfficialRTASR {
                 
                 // 临时结果也同步到所有用户
                 if (resultTextTemp.trim()) {
+                    // 只发送到服务器，不直接本地显示（避免重复）
                     this.sendTranscriptionResult(resultTextTemp, true);
-                    this.updatePartialTranscription(resultTextTemp);
+                    console.log('📡 已发送临时结果到服务器');
                 } else {
                     console.log('🚫 跳过空的临时结果');
                 }
@@ -446,6 +448,16 @@ class XfyunOfficialRTASR {
         // 避免重复：检查是否已经包含在全文中
         if (window.transcriptionClient && window.transcriptionClient.fullTranscriptionText.includes(cleanText)) {
             console.log('🚫 跳过重复的转录结果:', cleanText);
+            return;
+        }
+        
+        // 检查是否是当前用户发送的转录结果（避免本地重复显示）
+        const isCurrentUserTranscription = typeof currentUserId !== 'undefined' && 
+                                         typeof currentUsername !== 'undefined' && 
+                                         this.isRecording;
+        
+        if (isCurrentUserTranscription) {
+            console.log('🚫 跳过当前用户的本地转录显示（避免重复）:', cleanText);
             return;
         }
         

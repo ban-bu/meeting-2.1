@@ -1770,6 +1770,15 @@ function displayTranscriptionResult(data) {
         window.transcriptionClient = { fullTranscriptionText: '' };
     }
     
+    // 避免重复：检查是否已经包含在全文中
+    if (data.result && data.result.trim()) {
+        const cleanText = data.result.trim();
+        if (window.transcriptionClient.fullTranscriptionText.includes(cleanText)) {
+            console.log('🚫 跳过重复的转录结果:', cleanText);
+            return;
+        }
+    }
+    
     if (data.isPartial) {
         // 临时结果：显示为蓝色动画预览
         const finalText = window.transcriptionClient.fullTranscriptionText;
