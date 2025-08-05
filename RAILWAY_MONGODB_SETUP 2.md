@@ -14,8 +14,7 @@
 1. **进入项目**：点击您的"athletic-essence"项目
 2. **找到MongoDB服务**：在Architecture视图中找到MongoDB卡片
 3. **查看变量**：点击MongoDB服务，进入"Variables"标签页
-4. **复制连接字符串**：找到`MONGODB_URI`变量并复制其值
-
+4. **复制连接字符串**：找到`MONGODB_URI`变量并复制其
 ### 2. 配置后端服务
 
 在您的后端服务中设置环境变量：

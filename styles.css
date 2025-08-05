@@ -452,6 +452,23 @@ body {
     100% { opacity: 1; }
 }
 
+/* 禁用状态的转录按钮样式 */
+.btn-start-recording:disabled,
+.btn-xfyun-recording:disabled {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    border-color: #d1d5db !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
+}
+
+.btn-start-recording:disabled:hover,
+.btn-xfyun-recording:disabled:hover {
+    background: #f3f4f6 !important;
+    color: #9ca3af !important;
+    transform: none !important;
+}
+
 .btn-download {
     background: rgba(99, 102, 241, 0.1);
     color: var(--primary-color);

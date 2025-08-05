@@ -1003,6 +1003,11 @@ async function startVoiceCall() {
         showToast('语音通话已开始', 'success');
         console.log('✅ 语音通话已启动');
         
+        // 更新转录按钮状态
+        if (typeof onCallStatusChange === 'function') {
+            onCallStatusChange();
+        }
+        
     } catch (error) {
         console.error('❌ 启动语音通话失败:', error);
         
@@ -1063,6 +1068,11 @@ function cleanupCallResources() {
     
     showToast('语音通话已结束', 'info');
     console.log('✅ 通话资源已清理');
+    
+    // 更新转录按钮状态（禁用转录功能）
+    if (typeof onCallStatusChange === 'function') {
+        onCallStatusChange();
+    }
 }
 
 // 结束语音通话

@@ -106,8 +106,10 @@
                         <div class="transcription-history" id="transcriptionHistory">
                             <div class="transcription-placeholder">
                                 <i class="fas fa-info-circle"></i>
-                                <p>点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
-                                <p>支持中英文实时转录</p>
+                                <p><strong>使用说明：</strong></p>
+                                <p>1. 请先点击"开始通话"按钮开始语音通话</p>
+                                <p>2. 通话开始后，点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
+                                <p>3. 支持中英文实时转录，转录结果可下载</p>
                             </div>
                         </div>
                     </div>
@@ -461,6 +463,157 @@
             
             console.log('💡 调试提示: 使用 debugConnection() 测试连接，使用 testSocketIO() 检查Socket.IO状态');
             console.log('💡 科大讯飞调试: 使用 debugXfyunConnection() 检查科大讯飞连接状态');
+        });
+        
+        // 检查通话状态的转录启动函数
+        function checkCallStatusAndStartTranscription(transcriptionType) {
+            // 检查是否在通话中
+            if (typeof isInCall === 'undefined' || !isInCall) {
+                showToast('请先开始语音通话再使用转录功能', 'warning');
+                return false;
+            }
+            return true;
+        }
+        
+        // 重写Assembly转录启动函数
+        function startTranscription() {
+            if (!checkCallStatusAndStartTranscription('Assembly')) {
+                return;
+            }
+            
+            if (window.transcriptionClient) {
+                window.transcriptionClient.startStreamingMode(roomId);
+                
+                // 记录开始时间
+                window.transcriptionClient.transcriptionStartTime = new Date();
+                
+                // 重置累积内容
+                window.transcriptionClient.fullTranscriptionText = '';
+                
+                // 更新UI
+                document.getElementById('startRecordBtn').style.display = 'none';
+                document.getElementById('stopRecordBtn').style.display = 'block';
+                document.getElementById('downloadBtn').style.display = 'none';
+                
+                // 更新状态
+                const statusDiv = document.getElementById('transcriptionStatus');
+                if (statusDiv) {
+                    const iconSpan = statusDiv.querySelector('i');
+                    const textSpan = statusDiv.querySelector('span');
+                    if (iconSpan && textSpan) {
+                        iconSpan.className = 'fas fa-microphone';
+                        textSpan.textContent = '正在转录...';
+                        statusDiv.style.color = '#22c55e';
+                    }
+                }
+                
+                showToast('开始Assembly语音转录', 'success');
+            } else {
+                showToast('Assembly转录服务未初始化，请刷新页面', 'error');
+            }
+        }
+        
+        // 重写科大讯飞转录启动函数
+        function startXfyunTranscription() {
+            if (!checkCallStatusAndStartTranscription('科大讯飞')) {
+                return;
+            }
+            
+            if (window.xfyunClient) {
+                window.xfyunClient.toggleRecording();
+            } else {
+                showToast('科大讯飞转录服务未初始化', 'error');
+            }
+        }
+        
+        // Assembly AI停止转录函数
+        function stopTranscription() {
+            if (window.transcriptionClient) {
+                window.transcriptionClient.stopStreamingMode();
+                
+                // 更新UI
+                document.getElementById('startRecordBtn').style.display = 'block';
+                document.getElementById('stopRecordBtn').style.display = 'none';
+                
+                // 更新状态
+                const statusDiv = document.getElementById('transcriptionStatus');
+                if (statusDiv) {
+                    const iconSpan = statusDiv.querySelector('i');
+                    const textSpan = statusDiv.querySelector('span');
+                    if (iconSpan && textSpan) {
+                        iconSpan.className = 'fas fa-microphone-slash';
+                        textSpan.textContent = '转录已停止';
+                        statusDiv.style.color = '#6b7280';
+                    }
+                }
+                
+                // 如果有转录内容，显示下载按钮
+                if (window.transcriptionClient.fullTranscriptionText.length > 0) {
+                    document.getElementById('downloadBtn').style.display = 'block';
+                }
+                
+                showToast('Assembly转录已停止', 'info');
+            } else {
+                showToast('Assembly转录服务未初始化，请刷新页面', 'error');
+            }
+        }
+        
+        // 科大讯飞停止转录函数
+        function stopXfyunTranscription() {
+            if (window.xfyunClient) {
+                window.xfyunClient.stopRecording();
+            } else {
+                showToast('科大讯飞转录服务未初始化', 'error');
+            }
+        }
+        
+        // 更新转录按钮状态
+        function updateTranscriptionButtonsState() {
+            const assemblyStartBtn = document.getElementById('startRecordBtn');
+            const assemblyStopBtn = document.getElementById('stopRecordBtn');
+            const xfyunStartBtn = document.getElementById('xfyunStartBtn');
+            const xfyunStopBtn = document.getElementById('xfyunStopBtn');
+            
+            if (typeof isInCall !== 'undefined' && isInCall) {
+                // 通话中 - 启用转录按钮
+                if (assemblyStartBtn) {
+                    assemblyStartBtn.disabled = false;
+                    assemblyStartBtn.title = '开始Assembly AI实时转录';
+                }
+                if (xfyunStartBtn) {
+                    xfyunStartBtn.disabled = false;
+                    xfyunStartBtn.title = '开始科大讯飞实时转录';
+                }
+            } else {
+                // 未通话 - 禁用转录按钮
+                if (assemblyStartBtn) {
+                    assemblyStartBtn.disabled = true;
+                    assemblyStartBtn.title = '请先开始语音通话';
+                }
+                if (assemblyStopBtn && assemblyStopBtn.style.display !== 'none') {
+                    // 如果正在转录，先停止
+                    stopTranscription();
+                }
+                if (xfyunStartBtn) {
+                    xfyunStartBtn.disabled = true;
+                    xfyunStartBtn.title = '请先开始语音通话';
+                }
+                if (xfyunStopBtn && xfyunStopBtn.style.display !== 'none') {
+                    // 如果正在转录，先停止
+                    stopXfyunTranscription();
+                }
+            }
+        }
+        
+        // 监听通话状态变化
+        function onCallStatusChange() {
+            updateTranscriptionButtonsState();
+        }
+        
+        // 页面加载完成后初始化转录按钮状态
+        document.addEventListener('DOMContentLoaded', function() {
+            // 延迟检查，确保isInCall变量已定义
+            setTimeout(updateTranscriptionButtonsState, 1000);
         });
     </script>
 </body>
