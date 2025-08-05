@@ -1702,6 +1702,121 @@ function handleMuteStatus(data) {
         updateCallParticipants();
     }
 }
+
+// 处理转录状态变化
+function handleTranscriptionStatusChange(data) {
+    console.log('📝 转录状态变化:', data);
+    
+    if (data.action === 'start') {
+        showToast(`${data.username} 开始了转录`, 'info');
+        console.log(`📝 ${data.username} 开始转录`);
+    } else if (data.action === 'stop') {
+        showToast(`${data.username} 停止了转录`, 'info');
+        console.log(`📝 ${data.username} 停止转录`);
+    }
+}
+
+// 处理转录结果
+function handleTranscriptionResult(data) {
+    console.log('📝 收到转录结果:', data);
+    
+    if (data.type === 'xfyun') {
+        // 显示转录结果到实时记录框
+        displayTranscriptionResult(data);
+        
+        // 如果不是临时结果，更新全局转录文本用于下载
+        if (!data.isPartial && data.result) {
+            updateGlobalTranscriptionText(data);
+        }
+    }
+}
+
+// 显示转录结果到实时记录框
+function displayTranscriptionResult(data) {
+    const transcriptionHistory = document.getElementById('transcriptionHistory');
+    if (!transcriptionHistory) return;
+    
+    // 隐藏占位符
+    const placeholder = transcriptionHistory.querySelector('.transcription-placeholder');
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+    
+    // 获取或创建累积转录容器
+    let cumulativeDiv = document.getElementById('cumulativeTranscription');
+    if (!cumulativeDiv) {
+        cumulativeDiv = document.createElement('div');
+        cumulativeDiv.id = 'cumulativeTranscription';
+        cumulativeDiv.className = 'cumulative-transcription';
+        cumulativeDiv.style.cssText = `
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 14px;
+            line-height: 1.8;
+            color: #374151;
+            min-height: 100px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            border: 2px solid #3b82f6;
+            border-left: 4px solid #3b82f6;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+        `;
+        transcriptionHistory.appendChild(cumulativeDiv);
+    }
+    
+    // 初始化全局转录文本（如果不存在）
+    if (!window.transcriptionClient) {
+        window.transcriptionClient = { fullTranscriptionText: '' };
+    }
+    
+    if (data.isPartial) {
+        // 临时结果：显示为蓝色动画预览
+        const finalText = window.transcriptionClient.fullTranscriptionText;
+        const previewHtml = finalText + 
+            '<span class="current-preview" style="color: #2563eb; background: rgba(37, 99, 235, 0.15); padding: 2px 4px; border-radius: 3px; animation: pulse 1.5s infinite;">' + 
+            data.result + '</span>';
+        cumulativeDiv.innerHTML = previewHtml;
+    } else {
+        // 最终结果：添加到累积文本
+        if (data.result && data.result.trim()) {
+            if (window.transcriptionClient.fullTranscriptionText.length > 0) {
+                window.transcriptionClient.fullTranscriptionText += ' ';
+            }
+            window.transcriptionClient.fullTranscriptionText += data.result.trim();
+            cumulativeDiv.textContent = window.transcriptionClient.fullTranscriptionText;
+            
+            // 显示下载按钮
+            const downloadBtn = document.getElementById('downloadBtn');
+            if (downloadBtn && window.transcriptionClient.fullTranscriptionText.length > 0) {
+                downloadBtn.style.display = 'block';
+            }
+        }
+    }
+    
+    // 自动滚动到底部
+    transcriptionHistory.scrollTop = transcriptionHistory.scrollHeight;
+}
+
+// 更新全局转录文本（用于下载）
+function updateGlobalTranscriptionText(data) {
+    if (!window.transcriptionClient) {
+        window.transcriptionClient = { fullTranscriptionText: '' };
+    }
+    
+    if (data.result && data.result.trim()) {
+        // 避免重复添加相同内容
+        const newText = data.result.trim();
+        if (!window.transcriptionClient.fullTranscriptionText.includes(newText)) {
+            if (window.transcriptionClient.fullTranscriptionText.length > 0) {
+                window.transcriptionClient.fullTranscriptionText += ' ';
+            }
+            window.transcriptionClient.fullTranscriptionText += newText;
+            
+            console.log('📝 已更新全局转录文本，总长度:', window.transcriptionClient.fullTranscriptionText.length);
+        }
+    }
+}
     
     showUsernameModal();
     registerServiceWorker();
@@ -2085,6 +2200,17 @@ function setupRealtimeClient() {
         onMuteStatus: (data) => {
             console.log('收到静音状态:', data);
             handleMuteStatus(data);
+        },
+        
+        // 转录事件处理
+        onTranscriptionStatusChange: (data) => {
+            console.log('转录状态变化:', data);
+            handleTranscriptionStatusChange(data);
+        },
+        
+        onTranscriptionResult: (data) => {
+            console.log('收到转录结果:', data);
+            handleTranscriptionResult(data);
         },
         
         onError: (error) => {

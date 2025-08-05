@@ -82,7 +82,8 @@
                         </div>
                     </div>
                     <div class="transcription-controls">
-                        <button class="btn-start-recording" id="startRecordBtn" onclick="startTranscription()">
+                        <!-- Assembly转录按钮已隐藏 -->
+                        <button class="btn-start-recording" id="startRecordBtn" onclick="startTranscription()" style="display: none;">
                             <i class="fas fa-microphone"></i> Assembly转录
                         </button>
                         <button class="btn-stop-recording" id="stopRecordBtn" onclick="stopTranscription()" style="display: none;">
@@ -109,8 +110,8 @@
                                 <p><strong>使用说明：</strong></p>
                                 <p>1. 请先加入语音通话（发起通话或接听邀请）</p>
                                 <p>2. 通话中的任何参与者都可以使用转录功能</p>
-                                <p>3. 点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
-                                <p>4. 支持中英文实时转录，转录结果可下载</p>
+                                <p>3. 点击"科大讯飞转录"按钮开始语音转录</p>
+                                <p>4. 支持中英文实时转录，转录结果同步到所有参与者</p>
                             </div>
                         </div>
                     </div>
@@ -571,8 +572,6 @@
         
         // 更新转录按钮状态
         function updateTranscriptionButtonsState() {
-            const assemblyStartBtn = document.getElementById('startRecordBtn');
-            const assemblyStopBtn = document.getElementById('stopRecordBtn');
             const xfyunStartBtn = document.getElementById('xfyunStartBtn');
             const xfyunStopBtn = document.getElementById('xfyunStopBtn');
             
@@ -580,11 +579,7 @@
             const canTranscribe = (typeof isInCall !== 'undefined' && isInCall);
             
             if (canTranscribe) {
-                // 通话中 - 启用转录按钮
-                if (assemblyStartBtn) {
-                    assemblyStartBtn.disabled = false;
-                    assemblyStartBtn.title = '开始Assembly AI实时转录';
-                }
+                // 通话中 - 启用科大讯飞转录按钮
                 if (xfyunStartBtn) {
                     xfyunStartBtn.disabled = false;
                     xfyunStartBtn.title = '开始科大讯飞实时转录';
@@ -593,14 +588,6 @@
                 // 无法转录 - 禁用转录按钮
                 const disabledReason = '请先加入语音通话';
                 
-                if (assemblyStartBtn) {
-                    assemblyStartBtn.disabled = true;
-                    assemblyStartBtn.title = disabledReason;
-                }
-                if (assemblyStopBtn && assemblyStopBtn.style.display !== 'none') {
-                    // 如果正在转录，先停止
-                    stopTranscription();
-                }
                 if (xfyunStartBtn) {
                     xfyunStartBtn.disabled = true;
                     xfyunStartBtn.title = disabledReason;

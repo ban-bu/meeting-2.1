@@ -181,23 +181,23 @@ class XfyunOfficialRTASR {
         }
 
         if (data.cn.st.type == 0) {
-            // 最终识别结果 - 添加到实时记录框
+            // 最终识别结果 - 添加到实时记录框并同步到所有用户
             this.resultText += resultTextTemp;
             this.resultTextTemp = "";
             console.log('✅ 最终结果:', resultTextTemp);
             
-            // 只有最终结果才添加到实时记录框
+            // 最终结果同步到所有用户
             if (resultTextTemp.trim()) {
-                this.updateTranscriptDisplay(resultTextTemp);
+                this.sendTranscriptionResult(resultTextTemp, false);
             }
         } else {
-            // 临时结果 - 显示实时预览
+            // 临时结果 - 显示实时预览并同步到所有用户
             this.resultTextTemp = resultTextTemp;
             console.log('🔄 临时结果:', resultTextTemp);
             
-            // 显示临时结果的实时预览
+            // 临时结果也同步到所有用户
             if (resultTextTemp.trim()) {
-                this.updatePartialTranscription(resultTextTemp);
+                this.sendTranscriptionResult(resultTextTemp, true);
             }
         }
     }
@@ -235,6 +235,9 @@ class XfyunOfficialRTASR {
             this.updateRecordingUI(true);
             this.showToast('开始科大讯飞实时转录', 'success');
             
+            // 通知服务器转录开始
+            this.sendTranscriptionStart();
+            
         } catch (error) {
             console.error('❌ 开始录音失败:', error);
             this.showToast(`录音失败: ${error.message}`, 'error');
@@ -260,6 +263,9 @@ class XfyunOfficialRTASR {
         
         // 清除临时预览，只保留最终结果
         this.clearPartialTranscription();
+        
+        // 通知服务器转录停止
+        this.sendTranscriptionStop();
         
         this.isRecording = false;
         this.disconnect();
@@ -487,6 +493,51 @@ class XfyunOfficialRTASR {
         if (cumulativeDiv && window.transcriptionClient) {
             // 只显示已确认的最终文本，清除临时预览
             cumulativeDiv.textContent = window.transcriptionClient.fullTranscriptionText;
+        }
+    }
+
+    // 发送转录开始事件到服务器
+    sendTranscriptionStart() {
+        if (window.realtimeClient && typeof roomId !== 'undefined' && typeof currentUserId !== 'undefined' && typeof currentUsername !== 'undefined') {
+            window.realtimeClient.sendXfyunTranscriptionStart({
+                roomId: roomId,
+                userId: currentUserId,
+                username: currentUsername
+            });
+            console.log('📡 已发送转录开始事件');
+        } else {
+            console.warn('⚠️ 无法发送转录开始事件：缺少必要参数或实时客户端未连接');
+        }
+    }
+
+    // 发送转录停止事件到服务器
+    sendTranscriptionStop() {
+        if (window.realtimeClient && typeof roomId !== 'undefined' && typeof currentUserId !== 'undefined' && typeof currentUsername !== 'undefined') {
+            window.realtimeClient.sendXfyunTranscriptionStop({
+                roomId: roomId,
+                userId: currentUserId,
+                username: currentUsername
+            });
+            console.log('📡 已发送转录停止事件');
+        } else {
+            console.warn('⚠️ 无法发送转录停止事件：缺少必要参数或实时客户端未连接');
+        }
+    }
+
+    // 发送转录结果到服务器同步
+    sendTranscriptionResult(result, isPartial) {
+        if (window.realtimeClient && typeof roomId !== 'undefined' && typeof currentUserId !== 'undefined' && typeof currentUsername !== 'undefined') {
+            window.realtimeClient.sendXfyunTranscriptionResult({
+                roomId: roomId,
+                userId: currentUserId,
+                username: currentUsername,
+                result: result,
+                isPartial: isPartial,
+                timestamp: new Date().toISOString()
+            });
+            console.log(`📡 已发送转录结果: ${result.substring(0, 50)}... (临时: ${isPartial})`);
+        } else {
+            console.warn('⚠️ 无法发送转录结果：缺少必要参数或实时客户端未连接');
         }
     }
 

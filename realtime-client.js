@@ -419,6 +419,19 @@ class RealtimeClient {
                 this.onMuteStatus(data);
             }
         });
+        
+        // 转录事件
+        this.socket.on('transcriptionStatusChange', (data) => {
+            if (this.onTranscriptionStatusChange) {
+                this.onTranscriptionStatusChange(data);
+            }
+        });
+        
+        this.socket.on('transcriptionResult', (data) => {
+            if (this.onTranscriptionResult) {
+                this.onTranscriptionResult(data);
+            }
+        });
     }
     
     scheduleReconnect(customDelay = null) {
@@ -590,6 +603,31 @@ class RealtimeClient {
         return false;
     }
     
+    // 转录相关方法
+    sendXfyunTranscriptionStart(data) {
+        if (this.socket && this.isConnected) {
+            this.socket.emit('xfyunTranscriptionStart', data);
+            return true;
+        }
+        return false;
+    }
+    
+    sendXfyunTranscriptionStop(data) {
+        if (this.socket && this.isConnected) {
+            this.socket.emit('xfyunTranscriptionStop', data);
+            return true;
+        }
+        return false;
+    }
+    
+    sendXfyunTranscriptionResult(data) {
+        if (this.socket && this.isConnected) {
+            this.socket.emit('xfyunTranscriptionResult', data);
+            return true;
+        }
+        return false;
+    }
+    
     // 配置回调函数
     setEventHandlers(handlers) {
         this.onMessageReceived = handlers.onMessageReceived;
@@ -611,6 +649,11 @@ class RealtimeClient {
         this.onCallOffer = handlers.onCallOffer;
         this.onCallAnswer = handlers.onCallAnswer;
         this.onIceCandidate = handlers.onIceCandidate;
+        this.onMuteStatus = handlers.onMuteStatus;
+        
+        // 转录事件处理器
+        this.onTranscriptionStatusChange = handlers.onTranscriptionStatusChange;
+        this.onTranscriptionResult = handlers.onTranscriptionResult;
     }
     
     // 状态查询
