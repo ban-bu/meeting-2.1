@@ -1153,6 +1153,11 @@ async function acceptCall() {
         showToast('已加入语音通话', 'success');
         console.log('✅ 已接受通话邀请');
         
+        // 更新转录按钮状态
+        if (typeof onCallStatusChange === 'function') {
+            onCallStatusChange();
+        }
+        
     } catch (error) {
         console.error('❌ 接受通话失败:', error);
         showToast('无法加入通话，请检查麦克风权限', 'error');
@@ -1635,7 +1640,26 @@ async function handleCallAnswer(data) {
     const peerConnection = peerConnections.get(data.fromUserId);
     if (peerConnection) {
         try {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            // 检查连接状态，只有在have-local-offer状态下才能设置远程描述
+            if (peerConnection.signalingState === 'have-local-offer') {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                console.log('✅ Answer设置成功，信令状态:', peerConnection.signalingState);
+                
+                // 处理暂存的ICE候选
+                if (peerConnection.pendingIceCandidates && peerConnection.pendingIceCandidates.length > 0) {
+                    console.log('📞 处理暂存的ICE候选:', peerConnection.pendingIceCandidates.length);
+                    for (const candidate of peerConnection.pendingIceCandidates) {
+                        try {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                        } catch (error) {
+                            console.error('❌ 添加暂存ICE候选失败:', error);
+                        }
+                    }
+                    peerConnection.pendingIceCandidates = [];
+                }
+            } else {
+                console.warn('⚠️ 信令状态不正确，无法设置answer:', peerConnection.signalingState);
+            }
         } catch (error) {
             console.error('❌ 处理answer失败:', error);
         }
@@ -1643,13 +1667,24 @@ async function handleCallAnswer(data) {
 }
 
 // 处理ICE候选
-function handleIceCandidate(data) {
+async function handleIceCandidate(data) {
     console.log('📞 收到ICE候选:', data);
     
     const peerConnection = peerConnections.get(data.fromUserId);
     if (peerConnection) {
         try {
-            peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            // 检查连接状态，确保远程描述已设置
+            if (peerConnection.remoteDescription) {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+                console.log('✅ ICE候选添加成功');
+            } else {
+                // 如果远程描述还未设置，将ICE候选存储起来稍后处理
+                console.warn('⚠️ 远程描述未设置，暂存ICE候选');
+                if (!peerConnection.pendingIceCandidates) {
+                    peerConnection.pendingIceCandidates = [];
+                }
+                peerConnection.pendingIceCandidates.push(data.candidate);
+            }
         } catch (error) {
             console.error('❌ 添加ICE候选失败:', error);
         }

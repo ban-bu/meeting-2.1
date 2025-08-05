@@ -473,8 +473,8 @@ body {
    响应式设计改进
    ======================== */
 
-/* 中等屏幕（笔记本电脑）适配 - 1024px到1366px */
-@media (max-width: 1366px) and (min-width: 1024px) {
+/* 大屏幕笔记本电脑适配 - 1200px到1366px */
+@media (max-width: 1366px) and (min-width: 1200px) {
     .main-content {
         grid-template-columns: 220px 1fr 300px;
     }
@@ -496,18 +496,21 @@ body {
     }
 }
 
-/* 小笔记本电脑适配 - 768px到1024px */
-@media (max-width: 1024px) and (min-width: 769px) {
+/* 中等屏幕（笔记本电脑）适配 - 1024px到1200px */
+@media (max-width: 1200px) and (min-width: 1024px) {
     .main-content {
         grid-template-columns: 200px 1fr 280px;
+        gap: 0.5rem;
     }
     
     .sidebar {
         width: 200px;
+        padding: 0.75rem;
     }
     
     .transcription-panel {
         width: 280px;
+        padding: 0.75rem;
     }
     
     .participants-list {
@@ -516,20 +519,100 @@ body {
     
     .transcription-controls {
         gap: 0.5rem;
+        flex-wrap: wrap;
     }
     
     .btn-start-recording,
     .btn-xfyun-recording {
         padding: 0.5rem 0.75rem;
         font-size: 0.85rem;
+        flex: 1 0 45%;
+    }
+    
+    .header h1 {
+        font-size: 1.4rem;
+    }
+    
+    .header p {
+        font-size: 0.8rem;
+    }
+}
+
+/* 小笔记本电脑适配 - 768px到1024px */
+@media (max-width: 1024px) and (min-width: 769px) {
+    .main-content {
+        grid-template-columns: 180px 1fr 260px;
+        gap: 0.5rem;
+    }
+    
+    .sidebar {
+        width: 180px;
+        padding: 0.75rem;
+    }
+    
+    .transcription-panel {
+        width: 260px;
+        padding: 0.75rem;
+    }
+    
+    .participants-list {
+        font-size: 0.8rem;
+        gap: 0.5rem;
+    }
+    
+    .participant {
+        padding: 0.5rem;
+    }
+    
+    .participant-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 0.75rem;
+    }
+    
+    .transcription-controls {
+        gap: 0.5rem;
+        padding: 0.5rem;
+        flex-direction: column;
+    }
+    
+    .btn-start-recording,
+    .btn-stop-recording,
+    .btn-xfyun-recording,
+    .btn-xfyun-stop {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+        width: 100%;
+    }
+    
+    .transcription-header h3 {
+        font-size: 1rem;
+    }
+    
+    .transcription-history {
+        font-size: 0.85rem;
+        max-height: 200px;
     }
     
     .chat-header {
-        padding: 1rem;
+        padding: 0.75rem;
+    }
+    
+    .chat-header h3 {
+        font-size: 1.1rem;
     }
     
     .header {
         padding: 0.5rem 0.75rem;
+    }
+    
+    .header h1 {
+        font-size: 1.4rem;
+    }
+    
+    .message {
+        padding: 0.75rem;
+        font-size: 0.9rem;
     }
 }
 

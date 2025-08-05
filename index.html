@@ -107,9 +107,9 @@
                             <div class="transcription-placeholder">
                                 <i class="fas fa-info-circle"></i>
                                 <p><strong>使用说明：</strong></p>
-                                <p>1. 只有<strong>会议创建者</strong>可以使用转录功能</p>
-                                <p>2. 请先点击"开始通话"按钮开始语音通话</p>
-                                <p>3. 通话开始后，点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
+                                <p>1. 请先加入语音通话（发起通话或接听邀请）</p>
+                                <p>2. 通话中的任何参与者都可以使用转录功能</p>
+                                <p>3. 点击"Assembly转录"或"科大讯飞转录"按钮开始语音转录</p>
                                 <p>4. 支持中英文实时转录，转录结果可下载</p>
                             </div>
                         </div>
@@ -466,17 +466,11 @@
             console.log('💡 科大讯飞调试: 使用 debugXfyunConnection() 检查科大讯飞连接状态');
         });
         
-        // 检查通话状态和创建者权限的转录启动函数
+        // 检查通话状态的转录启动函数
         function checkCallStatusAndStartTranscription(transcriptionType) {
-            // 检查是否在通话中
+            // 检查是否在通话中（通话中的所有参与者都可以转录）
             if (typeof isInCall === 'undefined' || !isInCall) {
-                showToast('请先开始语音通话再使用转录功能', 'warning');
-                return false;
-            }
-            
-            // 检查是否是会议创建者
-            if (typeof window.isCreator === 'undefined' || !window.isCreator) {
-                showToast('只有会议创建者可以使用转录功能', 'warning');
+                showToast('请先加入语音通话再使用转录功能', 'warning');
                 return false;
             }
             
@@ -582,12 +576,11 @@
             const xfyunStartBtn = document.getElementById('xfyunStartBtn');
             const xfyunStopBtn = document.getElementById('xfyunStopBtn');
             
-            // 检查是否满足转录条件（通话中 + 创建者）
-            const canTranscribe = (typeof isInCall !== 'undefined' && isInCall) && 
-                                  (typeof window.isCreator !== 'undefined' && window.isCreator);
+            // 检查是否满足转录条件（仅需要在通话中）
+            const canTranscribe = (typeof isInCall !== 'undefined' && isInCall);
             
             if (canTranscribe) {
-                // 通话中且是创建者 - 启用转录按钮
+                // 通话中 - 启用转录按钮
                 if (assemblyStartBtn) {
                     assemblyStartBtn.disabled = false;
                     assemblyStartBtn.title = '开始Assembly AI实时转录';
@@ -598,14 +591,7 @@
                 }
             } else {
                 // 无法转录 - 禁用转录按钮
-                let disabledReason = '';
-                if (typeof isInCall === 'undefined' || !isInCall) {
-                    disabledReason = '请先开始语音通话';
-                } else if (typeof window.isCreator === 'undefined' || !window.isCreator) {
-                    disabledReason = '只有会议创建者可以使用转录功能';
-                } else {
-                    disabledReason = '转录功能不可用';
-                }
+                const disabledReason = '请先加入语音通话';
                 
                 if (assemblyStartBtn) {
                     assemblyStartBtn.disabled = true;
