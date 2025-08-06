@@ -429,6 +429,70 @@ const dataService = {
     }
 };
 
+// 定期清理无效的通话状态
+setInterval(async () => {
+    try {
+        // 获取所有活跃的socket连接
+        const activeSockets = Array.from(io.sockets.sockets.keys());
+        
+        // 检查数据库中处于通话状态但socket已断开的用户
+        if (mongoose.connection.readyState === 1) {
+            const rooms = await Room.find({});
+            for (const room of rooms) {
+                const participants = await dataService.getParticipants(room.roomId);
+                for (const participant of participants) {
+                    if (participant.status === 'in-call' && 
+                        participant.socketId && 
+                        !activeSockets.includes(participant.socketId)) {
+                        
+                        logger.info(`🔄 清理无效通话状态: ${participant.userId} (socket已断开)`);
+                        
+                        // 更新状态为离线
+                        await dataService.updateParticipant(
+                            room.roomId, 
+                            participant.userId, 
+                            { status: 'offline', socketId: null }
+                        );
+                        
+                        // 通知房间其他用户
+                        io.to(room.roomId).emit('callEnd', { 
+                            userId: participant.userId,
+                            reason: 'connection_lost'
+                        });
+                    }
+                }
+            }
+        } else {
+            // 内存模式下的清理
+            const allParticipants = memoryStorage.getAllParticipants();
+            for (const [roomId, participants] of allParticipants) {
+                for (const participant of participants.values()) {
+                    if (participant.status === 'in-call' && 
+                        participant.socketId && 
+                        !activeSockets.includes(participant.socketId)) {
+                        
+                        logger.info(`🔄 清理无效通话状态: ${participant.userId} (socket已断开)`);
+                        
+                        // 更新状态
+                        memoryStorage.updateParticipant(roomId, participant.userId, {
+                            status: 'offline',
+                            socketId: null
+                        });
+                        
+                        // 通知房间其他用户
+                        io.to(roomId).emit('callEnd', { 
+                            userId: participant.userId,
+                            reason: 'connection_lost'
+                        });
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        logger.error('清理通话状态失败:', error);
+    }
+}, 30000); // 每30秒清理一次
+
 // Socket.IO事件处理
 io.on('connection', (socket) => {
     logger.info('新用户连接: ' + socket.id);
@@ -471,16 +535,45 @@ io.on('connection', (socket) => {
             socket.username = username;
             socket.roomId = roomId;
             
-            // 检查是否已有相同用户名但不同socketId的用户，将其标记为离线
+            // 强制清理相同用户名的所有旧连接状态
             const existingParticipants = await dataService.getParticipants(roomId);
             const sameNameUsers = existingParticipants.filter(p => p.name === username && p.userId !== userId);
             
-            // 将同名但不同ID的用户标记为离线
+            // 将同名但不同ID的用户标记为离线，并强制断开旧连接
             for (const sameNameUser of sameNameUsers) {
+                // 查找并断开旧的socket连接
+                const oldSocketId = sameNameUser.socketId;
+                if (oldSocketId) {
+                    const oldSocket = io.sockets.sockets.get(oldSocketId);
+                    if (oldSocket) {
+                        logger.info(`🔄 强制断开旧连接: ${oldSocketId} (用户: ${username})`);
+                        oldSocket.emit('forceDisconnect', { reason: '新连接建立，旧连接将被断开' });
+                        oldSocket.disconnect(true);
+                    }
+                }
+                
+                // 标记为离线
                 await dataService.updateParticipant(roomId, sameNameUser.userId, {
                     status: 'offline',
                     socketId: null
                 });
+                
+                logger.info(`🔄 清理旧用户状态: ${sameNameUser.userId} (用户: ${username})`);
+            }
+            
+            // 额外清理：检查是否有相同用户名但处于通话状态的用户，也要清理
+            const allParticipants = await dataService.getParticipants(roomId);
+            for (const participant of allParticipants) {
+                if (participant.name === username && participant.userId !== userId && participant.status === 'in-call') {
+                    logger.info(`🔄 清理旧通话状态: ${participant.userId} (用户: ${username})`);
+                    await dataService.updateParticipant(roomId, participant.userId, {
+                        status: 'offline',
+                        socketId: null
+                    });
+                    
+                    // 通知房间其他用户此用户离开通话
+                    socket.to(roomId).emit('callEnd', { userId: participant.userId });
+                }
             }
             
             // 检查房间是否已存在，确定是否是创建者
@@ -807,6 +900,25 @@ io.on('connection', (socket) => {
         }
     });
     
+    // 处理心跳
+    socket.on('heartbeat', (data) => {
+        const { timestamp, userId, roomId } = data;
+        // 更新用户的最后活动时间
+        socket.lastHeartbeat = timestamp;
+        
+        // 立即响应心跳
+        socket.emit('heartbeatResponse', { timestamp: Date.now() });
+        
+        // 可选：更新数据库中的用户活动时间
+        if (userId && roomId) {
+            dataService.updateParticipant(roomId, userId, {
+                lastActivity: new Date(timestamp)
+            }).catch(error => {
+                logger.error('更新用户活动时间失败:', error);
+            });
+        }
+    });
+
     // 断开连接
     socket.on('disconnect', async () => {
         try {
@@ -827,11 +939,24 @@ io.on('connection', (socket) => {
             // 查找该socket对应的参与者并更新状态
             const participant = await dataService.findParticipantBySocketId(socket.id);
             if (participant) {
+                // 检查用户是否在通话中，如果是则自动结束通话
+                const currentParticipant = await dataService.getParticipant(participant.roomId, participant.userId);
+                const wasInCall = currentParticipant && currentParticipant.status === 'in-call';
+                
                 await dataService.updateParticipant(
                     participant.roomId, 
                     participant.userId, 
                     { status: 'offline', socketId: null }
                 );
+                
+                // 如果用户在通话中，通知其他用户该用户离开通话
+                if (wasInCall) {
+                    logger.info(`🔄 用户 ${participant.userId} 断开连接时自动离开通话`);
+                    socket.to(participant.roomId).emit('callEnd', { 
+                        userId: participant.userId,
+                        reason: 'disconnected'
+                    });
+                }
                 
                 // 通知房间其他用户
                 socket.to(participant.roomId).emit('userLeft', { userId: participant.userId });
@@ -839,6 +964,8 @@ io.on('connection', (socket) => {
                 // 更新参与者列表
                 const participants = await dataService.getParticipants(participant.roomId);
                 io.to(participant.roomId).emit('participantsUpdate', participants);
+                
+                logger.info(`用户 ${participant.userId} 已离开房间 ${participant.roomId}${wasInCall ? ' (自动离开通话)' : ''}`);
             }
         } catch (error) {
             logger.error('处理断开连接失败: ' + error.message);

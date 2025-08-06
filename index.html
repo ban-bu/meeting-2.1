@@ -491,7 +491,12 @@
             }
             
             if (window.transcriptionClient) {
-                window.transcriptionClient.startStreamingMode(roomId);
+                // 如果在通话中，使用混合音频流；否则使用本地麦克风
+                const audioStream = (isInCall && mixedAudioStream) ? mixedAudioStream : null;
+                const audioStreamType = audioStream ? '混合音频流（包含所有参与者音频）' : '本地麦克风';
+                
+                console.log(`🎵 开始转录，使用音频源: ${audioStreamType}`);
+                window.transcriptionClient.startStreamingMode(roomId, audioStream);
                 
                 // 记录开始时间
                 window.transcriptionClient.transcriptionStartTime = new Date();
@@ -511,12 +516,13 @@
                     const textSpan = statusDiv.querySelector('span');
                     if (iconSpan && textSpan) {
                         iconSpan.className = 'fas fa-microphone';
-                        textSpan.textContent = '正在转录...';
+                        textSpan.textContent = audioStream ? '正在转录全部音频...' : '正在转录本地音频...';
                         statusDiv.style.color = '#22c55e';
                     }
                 }
                 
-                showToast('开始Assembly语音转录', 'success');
+                const toastMessage = audioStream ? '开始转录全部参与者音频' : '开始转录本地音频';
+                showToast(toastMessage, 'success');
             } else {
                 showToast('Assembly转录服务未初始化，请刷新页面', 'error');
             }

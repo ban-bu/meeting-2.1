@@ -831,18 +831,25 @@ Object.assign(TranscriptionClient.prototype, {
         }
     },
     
-    async startStreamingMode(roomId) {
+    async startStreamingMode(roomId, audioStream = null) {
         console.log('🌊 启动流式转录模式');
         
         try {
-            this.stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: {
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true,
-                    sampleRate: 16000
-                }
-            });
+            // 使用传入的音频流（如果可用），否则获取麦克风
+            if (audioStream) {
+                this.stream = audioStream;
+                console.log('🎵 使用混合音频流进行转录');
+            } else {
+                this.stream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: 16000
+                    }
+                });
+                console.log('🎵 使用本地麦克风进行转录');
+            }
             
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
                 sampleRate: 16000

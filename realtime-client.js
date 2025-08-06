@@ -16,6 +16,11 @@ class RealtimeClient {
         this.reconnectTimer = null;
         this.isReconnecting = false;
         
+        // 心跳机制
+        this.heartbeatInterval = null;
+        this.heartbeatTimeout = null;
+        this.lastHeartbeatTime = null;
+        
         // 事件回调
         this.onMessageReceived = null;
         this.onParticipantsUpdate = null;
@@ -253,6 +258,9 @@ class RealtimeClient {
                 this.reconnectTimer = null;
             }
             
+            // 启动心跳机制
+            this.startHeartbeat();
+            
             if (this.onConnectionChange) {
                 this.onConnectionChange(true);
             }
@@ -278,6 +286,29 @@ class RealtimeClient {
             if (reason !== 'io client disconnect') {
                 this.scheduleReconnect();
             }
+        });
+        
+        // 处理强制断开连接
+        this.socket.on('forceDisconnect', (data) => {
+            console.log('🔄 收到强制断开连接:', data);
+            if (data.reason) {
+                console.log('断开原因:', data.reason);
+                // 显示提示给用户
+                if (typeof showToast === 'function') {
+                    showToast('连接已被新会话替换，正在重新连接...', 'warning');
+                }
+            }
+            
+            // 清理本地通话状态
+            this.cleanupLocalCallState();
+            
+            // 短暂延迟后重新连接
+            setTimeout(() => {
+                if (!this.isConnected) {
+                    console.log('🔄 强制断开后重新连接...');
+                    this.establishConnection();
+                }
+            }, 1000);
         });
         
         this.socket.on('connect_error', (error) => {
@@ -438,6 +469,11 @@ class RealtimeClient {
                 console.warn('⚠️ onTranscriptionResult 回调未设置');
             }
         });
+        
+        // 处理心跳响应
+        this.socket.on('heartbeatResponse', () => {
+            this.handleHeartbeatResponse();
+        });
     }
     
     scheduleReconnect(customDelay = null) {
@@ -484,6 +520,44 @@ class RealtimeClient {
         }
     }
     
+    // 清理本地通话状态
+    cleanupLocalCallState() {
+        try {
+            console.log('🔄 清理本地通话状态...');
+            
+            // 清理全局通话状态
+            if (typeof window !== 'undefined') {
+                if (window.isInCall) {
+                    console.log('🔄 清理全局通话状态');
+                    // 调用全局的清理函数
+                    if (typeof cleanupCallResources === 'function') {
+                        cleanupCallResources();
+                    }
+                }
+                
+                // 重置通话相关变量
+                if (window.callParticipants) {
+                    window.callParticipants.clear();
+                }
+                
+                if (window.peerConnections) {
+                    window.peerConnections.forEach((connection, userId) => {
+                        connection.close();
+                    });
+                    window.peerConnections.clear();
+                }
+                
+                if (window.remoteStreams) {
+                    window.remoteStreams.clear();
+                }
+            }
+            
+            console.log('✅ 本地通话状态已清理');
+        } catch (error) {
+            console.error('❌ 清理本地通话状态失败:', error);
+        }
+    }
+
     // 公共API方法
     joinRoom(roomId, userId, username) {
         this.currentRoomId = roomId;
@@ -713,6 +787,9 @@ class RealtimeClient {
         this.isReconnecting = false;
         this.reconnectAttempts = 0;
         
+        // 停止心跳
+        this.stopHeartbeat();
+        
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
@@ -721,6 +798,59 @@ class RealtimeClient {
         this.currentRoomId = null;
         this.currentUserId = null;
         this.currentUsername = null;
+    }
+    
+    // 心跳机制
+    startHeartbeat() {
+        console.log('🔄 启动心跳机制');
+        
+        // 清除现有的心跳定时器
+        this.stopHeartbeat();
+        
+        // 每20秒发送一次心跳
+        this.heartbeatInterval = setInterval(() => {
+            if (this.isConnected && this.socket) {
+                this.lastHeartbeatTime = Date.now();
+                this.socket.emit('heartbeat', {
+                    timestamp: this.lastHeartbeatTime,
+                    userId: this.currentUserId,
+                    roomId: this.currentRoomId
+                });
+                
+                // 设置心跳超时检测（30秒内必须收到响应）
+                this.heartbeatTimeout = setTimeout(() => {
+                    console.warn('💔 心跳超时，连接可能已断开');
+                    if (this.isConnected) {
+                        // 强制重连
+                        this.isConnected = false;
+                        this.scheduleReconnect();
+                    }
+                }, 30000);
+            }
+        }, 20000);
+    }
+    
+    stopHeartbeat() {
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
+        
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
+        
+        this.lastHeartbeatTime = null;
+    }
+    
+    // 处理服务器心跳响应
+    handleHeartbeatResponse() {
+        if (this.heartbeatTimeout) {
+            clearTimeout(this.heartbeatTimeout);
+            this.heartbeatTimeout = null;
+        }
+        // 心跳响应收到，连接正常
     }
 }
 
