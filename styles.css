@@ -3054,3 +3054,131 @@ body {
         font-size: 1rem;
     }
 }
+
+/* 通话按钮样式 */
+.btn-call {
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 16px;
+    box-shadow: var(--shadow-md);
+}
+
+.btn-call:hover {
+    background: var(--primary-dark);
+    transform: scale(1.05);
+    box-shadow: var(--shadow-lg);
+}
+
+.btn-call.in-call {
+    background: var(--error-color);
+    animation: pulse 2s infinite;
+}
+
+.btn-call.join-call {
+    background: var(--success-color);
+}
+
+/* 通话状态指示器 */
+.call-status-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #3b82f6;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* 确保通话按钮在移动端可见 */
+@media (max-width: 768px) {
+    .btn-call {
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
+    }
+    
+    .call-status-indicator {
+        top: 10px;
+        right: 10px;
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+}
+
+/* 音频混合器状态指示器 */
+.audio-mixer-status {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 999;
+    display: none;
+}
+
+.audio-mixer-status.active {
+    display: block;
+}
+
+/* 通话参与者状态 */
+.call-participant.speaking {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid var(--success-color);
+}
+
+.call-participant.muted {
+    opacity: 0.6;
+}
+
+.call-participant.muted .call-participant-avatar {
+    background: var(--text-light);
+}
+
+/* 通话控制按钮状态 */
+.call-control-btn.muted {
+    background: var(--warning-color);
+}
+
+.call-control-btn.muted i {
+    color: white;
+}
+
+/* 确保所有通话相关按钮都可见 */
+.btn-call,
+.btn-test-mic,
+.btn-voice,
+.btn-transcribe {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}

@@ -705,101 +705,77 @@ function optimizeMobileInput() {
 
 // 初始化
 function init() {
-    // 从URL获取房间号，如果没有则在设置用户名时处理
+    console.log('🚀 初始化应用...');
+    
+    // 检查URL参数
     const urlParams = new URLSearchParams(window.location.search);
-    const urlRoomId = urlParams.get('room');
-    if (urlRoomId) {
-        roomId = urlRoomId;
+    const roomParam = urlParams.get('room');
+    
+    if (roomParam) {
+        roomId = roomParam;
         window.roomId = roomId;
         document.getElementById('roomId').textContent = `房间: ${roomId}`;
     }
     
-    setupEventListeners();
-    setupRealtimeClient();
-    
     // 初始化移动端支持
     initMobileSupport();
-    initTouchGestures();
-    optimizeMobileInput();
-    
-        // 移动端输入框管理
-    if (isMobileDevice()) {
-        // 检查欢迎页面状态并相应处理输入框
-        const checkWelcomePageAndInput = () => {
-            const inputContainer = document.querySelector('.input-container');
-            const usernameModal = document.getElementById('usernameModal');
-            const isOnWelcomePage = usernameModal && (usernameModal.style.display === 'block' || usernameModal.style.display === 'flex');
-            
-            if (inputContainer) {
-                if (isOnWelcomePage) {
-                    // 在欢迎页面时隐藏输入框
-                    inputContainer.style.display = 'none';
-                } else {
-                    // 在正常聊天时显示输入框
-                    inputContainer.style.display = 'flex';
-                    inputContainer.style.visibility = 'visible';
-                    inputContainer.style.opacity = '1';
-                    inputContainer.style.position = 'fixed';
-                    inputContainer.style.bottom = '0';
-                    inputContainer.style.left = '0';
-                    inputContainer.style.right = '0';
-                    inputContainer.style.zIndex = '9999';
-                }
-            }
-        };
-        
-        // 初始检查
-        setTimeout(checkWelcomePageAndInput, 500);
-        
-        // 定期检查状态变化
-        setInterval(checkWelcomePageAndInput, 1000);
-        
-        // 监听屏幕方向变化
-        window.addEventListener('orientationchange', () => {
-            setTimeout(checkWelcomePageAndInput, 100);
-        });
-        
-        // 监听窗口大小变化
-        window.addEventListener('resize', () => {
-            setTimeout(checkWelcomePageAndInput, 100);
-        });
-    }
-
-
-    
-    // 确保移动端按钮可见性
-    setTimeout(() => {
-        if (isMobileDevice()) {
-            // 检查是否在欢迎页面，如果是则隐藏输入框
-            const usernameModal = document.getElementById('usernameModal');
-            const isOnWelcomePage = usernameModal && (usernameModal.style.display === 'block' || usernameModal.style.display === 'flex');
-            
-            if (isOnWelcomePage) {
-                const inputContainer = document.querySelector('.input-container');
-                if (inputContainer) {
-                    inputContainer.style.display = 'none';
-                }
-            } else {
-                // 确保输入框在正常聊天时始终可见
-                const inputContainer = document.querySelector('.input-container');
-                if (inputContainer) {
-                    inputContainer.style.display = 'flex';
-                    inputContainer.style.visibility = 'visible';
-                    inputContainer.style.opacity = '1';
-                }
-                forceMobileInputVisibility();
-            }
-        }
-    }, 1000);
-    
-    // 检查文档处理库加载状态
-    setTimeout(checkDocumentLibraries, 1000); // 延迟1秒确保库完全加载
-    
-    // 测试XLSX库
-    setTimeout(testXLSXLibrary, 1500);
     
     // 初始化语音通话功能
     initVoiceCall();
+    
+    // 设置事件监听器
+    setupEventListeners();
+    
+    // 检查文档处理库
+    checkDocumentLibraries();
+    
+    // 注册Service Worker
+    registerServiceWorker();
+    
+    // 设置离线指示器
+    setupOfflineIndicator();
+    
+    // 优化图标加载
+    optimizeIconLoading();
+    
+    // 初始化触摸手势
+    initTouchGestures();
+    
+    // 设置实时通信客户端
+    setupRealtimeClient();
+    
+    // 检查欢迎页面和输入框
+    const checkWelcomePageAndInput = () => {
+        const usernameModal = document.getElementById('usernameModal');
+        const inputContainer = document.querySelector('.input-container');
+        
+        if (usernameModal && usernameModal.style.display !== 'none') {
+            // 如果用户名模态框显示，隐藏输入框
+            if (inputContainer) {
+                inputContainer.style.display = 'none';
+            }
+        } else {
+            // 如果用户名模态框隐藏，显示输入框
+            if (inputContainer) {
+                inputContainer.style.display = 'flex';
+                inputContainer.style.visibility = 'visible';
+                inputContainer.style.opacity = '1';
+                
+                // 在移动端强制显示输入框
+                if (isMobileDevice()) {
+                    forceMobileInputVisibility();
+                }
+            }
+        }
+    };
+    
+    // 延迟检查，确保DOM完全加载
+    setTimeout(checkWelcomePageAndInput, 100);
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', handleResize);
+    
+    console.log('✅ 应用初始化完成');
 }
 
 // ==================== 语音通话功能 ====================
@@ -1449,18 +1425,24 @@ function updateCallButton() {
     const callBtn = document.getElementById('callBtn');
     if (!callBtn) return;
     
+    // 确保按钮可见
+    callBtn.style.display = 'block';
+    
     if (isInCall) {
         callBtn.classList.add('in-call');
         callBtn.innerHTML = '<i class="fas fa-phone-slash"></i>';
         callBtn.title = '结束通话';
+        callBtn.style.background = '#ef4444';
     } else {
         callBtn.classList.remove('in-call');
+        callBtn.style.background = '';
         
         // 检查是否有其他人在通话中
         if (isOtherUserInCall()) {
             callBtn.innerHTML = '<i class="fas fa-phone-plus"></i>';
             callBtn.title = '加入通话';
             callBtn.classList.add('join-call');
+            callBtn.style.background = '#10b981';
             
             // 显示通话状态指示器
             showCallStatusIndicator();
@@ -1685,79 +1667,113 @@ function stopCallTimer() {
 
 // WebRTC连接处理
 function createPeerConnection(userId) {
-    const configuration = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-    };
-    
-    const peerConnection = new RTCPeerConnection(configuration);
-    
-    // 添加本地流
-    if (localStream) {
-        localStream.getTracks().forEach(track => {
-            console.log('📞 添加音频轨道到对等连接:', track.kind, track.enabled);
-            peerConnection.addTrack(track, localStream);
-        });
+    try {
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+        
+        const peerConnection = new RTCPeerConnection(configuration);
+        
+        // 添加本地流
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+        }
+        
+        // 处理远程流
+        peerConnection.ontrack = (event) => {
+            console.log('🎵 收到远程音频流:', userId);
+            const remoteStream = event.streams[0];
+            
+            if (remoteStream) {
+                remoteStreams.set(userId, remoteStream);
+                
+                // 添加到音频混合器
+                if (audioMixer) {
+                    audioMixer.addRemoteStream(userId, remoteStream);
+                }
+                
+                // 创建音频元素播放远程音频
+                const audioElement = document.createElement('audio');
+                audioElement.srcObject = remoteStream;
+                audioElement.autoplay = true;
+                audioElement.volume = 1.0;
+                audioElements.set(userId, audioElement);
+                
+                // 添加到页面（隐藏）
+                audioElement.style.display = 'none';
+                document.body.appendChild(audioElement);
+                
+                console.log('🎵 远程音频流已添加到播放器');
+            }
+        };
+        
+        // 处理ICE候选
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('🧊 发送ICE候选:', userId);
+                if (isRealtimeEnabled && window.realtimeClient) {
+                    window.realtimeClient.sendIceCandidate({
+                        roomId,
+                        targetUserId: userId,
+                        candidate: event.candidate
+                    });
+                }
+            }
+        };
+        
+        // 处理连接状态变化
+        peerConnection.onconnectionstatechange = () => {
+            console.log('🔗 连接状态变化:', userId, peerConnection.connectionState);
+            
+            if (peerConnection.connectionState === 'connected') {
+                console.log('✅ 与用户连接成功:', userId);
+            } else if (peerConnection.connectionState === 'failed') {
+                console.error('❌ 与用户连接失败:', userId);
+                // 清理失败的连接
+                cleanupFailedConnection(userId);
+            }
+        };
+        
+        peerConnections.set(userId, peerConnection);
+        console.log('🔗 创建对等连接:', userId);
+        
+        return peerConnection;
+    } catch (error) {
+        console.error('❌ 创建对等连接失败:', error);
+        return null;
+    }
+}
+
+// 清理失败的连接
+function cleanupFailedConnection(userId) {
+    const peerConnection = peerConnections.get(userId);
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnections.delete(userId);
     }
     
-    // 处理远程流
-    peerConnection.ontrack = (event) => {
-        console.log('📞 收到远程音频流:', userId, event.streams[0].getTracks());
-        const remoteStream = event.streams[0];
-        remoteStreams.set(userId, remoteStream);
-        
-        // 添加到音频混合器
-        if (audioMixer) {
-            audioMixer.addRemoteStream(userId, remoteStream);
-            mixedAudioStream = audioMixer.getMixedStream();
-            console.log('🎵 远程音频流已添加到混合器');
-        }
-        
-        // 播放远程音频
-        const audioElement = document.createElement('audio');
-        audioElement.srcObject = remoteStream;
-        audioElement.autoplay = true;
-        audioElement.muted = !isSpeakerOn;
-        audioElement.volume = 1.0;
-        audioElement.id = `remote-audio-${userId}`;
-        
-        // 保存音频元素引用
-        audioElements.set(userId, audioElement);
-        
-        // 添加音频事件监听
-        audioElement.onloadedmetadata = () => {
-            console.log('📞 远程音频元数据加载完成');
-        };
-        
-        audioElement.onplay = () => {
-            console.log('📞 远程音频开始播放');
-        };
-        
-        audioElement.onerror = (error) => {
-            console.error('📞 远程音频播放错误:', error);
-        };
-        
-        document.body.appendChild(audioElement);
-    };
+    const remoteStream = remoteStreams.get(userId);
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(track => track.stop());
+        remoteStreams.delete(userId);
+    }
     
-    // 处理ICE候选
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            if (isRealtimeEnabled && window.realtimeClient) {
-                window.realtimeClient.sendIceCandidate({
-                    roomId,
-                    targetUserId: userId,
-                    candidate: event.candidate,
-                    fromUserId: currentUserId
-                });
-            }
-        }
-    };
+    const audioElement = audioElements.get(userId);
+    if (audioElement) {
+        audioElement.remove();
+        audioElements.delete(userId);
+    }
     
-    peerConnections.set(userId, peerConnection);
-    return peerConnection;
+    if (audioMixer) {
+        audioMixer.removeRemoteStream(userId);
+    }
+    
+    console.log('🧹 清理失败的连接:', userId);
 }
 
 // 处理通话邀请
@@ -2715,17 +2731,66 @@ function handleStorageChange(e) {
 
 // 添加当前用户到参与者列表
 function addCurrentUserToParticipants() {
-    const existingUser = participants.find(p => p.userId === currentUserId);
-    if (!existingUser && currentUsername) {
+    // 检查是否已存在相同用户名的用户
+    const existingUser = participants.find(p => p.name === currentUsername);
+    
+    if (existingUser) {
+        // 如果存在相同用户名的用户，更新其状态为在线
+        existingUser.status = 'online';
+        existingUser.lastSeen = Date.now();
+        existingUser.userId = currentUserId; // 更新用户ID
+        console.log('🔄 更新现有用户状态:', existingUser.name);
+    } else if (currentUsername) {
+        // 添加新用户
         participants.push({
             userId: currentUserId,
             name: currentUsername,
             status: 'online',
-            joinTime: Date.now()
+            joinTime: Date.now(),
+            lastSeen: Date.now()
         });
-        saveRoomData();
-        renderParticipants();
+        console.log('➕ 添加新用户:', currentUsername);
     }
+    
+    // 清理重复的离线用户
+    cleanupDuplicateOfflineUsers();
+    
+    saveRoomData();
+    renderParticipants();
+}
+
+// 清理重复的离线用户
+function cleanupDuplicateOfflineUsers() {
+    const userGroups = {};
+    
+    // 按用户名分组
+    participants.forEach(p => {
+        if (!userGroups[p.name]) {
+            userGroups[p.name] = [];
+        }
+        userGroups[p.name].push(p);
+    });
+    
+    // 处理每个用户组
+    Object.keys(userGroups).forEach(username => {
+        const users = userGroups[username];
+        if (users.length > 1) {
+            // 找到在线用户
+            const onlineUser = users.find(u => u.status === 'online');
+            const offlineUsers = users.filter(u => u.status === 'offline');
+            
+            if (onlineUser && offlineUsers.length > 0) {
+                // 移除离线用户
+                offlineUsers.forEach(offlineUser => {
+                    const index = participants.findIndex(p => p.userId === offlineUser.userId);
+                    if (index !== -1) {
+                        participants.splice(index, 1);
+                        console.log('🗑️ 移除重复的离线用户:', offlineUser.name);
+                    }
+                });
+            }
+        }
+    });
 }
 
 // 更新消息显示中的"(我)"标识
@@ -5379,6 +5444,7 @@ class AudioMixer {
         this.localSource = null;
         this.remoteSources = new Map();
         this.mixedStream = null;
+        this.gainNodes = new Map(); // 添加增益节点控制音量
     }
     
     async initialize() {
@@ -5400,7 +5466,15 @@ class AudioMixer {
                 this.localSource.disconnect();
             }
             this.localSource = this.audioContext.createMediaStreamSource(stream);
-            this.localSource.connect(this.destination);
+            
+            // 创建增益节点控制本地音频音量
+            const gainNode = this.audioContext.createGain();
+            gainNode.gain.value = 0.8; // 设置本地音频音量
+            
+            this.localSource.connect(gainNode);
+            gainNode.connect(this.destination);
+            this.gainNodes.set('local', gainNode);
+            
             console.log('🎵 添加本地音频流到混合器');
         } catch (error) {
             console.error('❌ 添加本地音频流失败:', error);
@@ -5412,11 +5486,23 @@ class AudioMixer {
             // 移除旧的远程流（如果存在）
             if (this.remoteSources.has(userId)) {
                 this.remoteSources.get(userId).disconnect();
+                if (this.gainNodes.has(userId)) {
+                    this.gainNodes.get(userId).disconnect();
+                }
             }
             
             const source = this.audioContext.createMediaStreamSource(stream);
-            source.connect(this.destination);
+            
+            // 创建增益节点控制远程音频音量
+            const gainNode = this.audioContext.createGain();
+            gainNode.gain.value = 1.0; // 设置远程音频音量
+            
+            source.connect(gainNode);
+            gainNode.connect(this.destination);
+            
             this.remoteSources.set(userId, source);
+            this.gainNodes.set(userId, gainNode);
+            
             console.log('🎵 添加远程音频流到混合器:', userId);
         } catch (error) {
             console.error('❌ 添加远程音频流失败:', error);
@@ -5428,8 +5514,14 @@ class AudioMixer {
             if (this.remoteSources.has(userId)) {
                 this.remoteSources.get(userId).disconnect();
                 this.remoteSources.delete(userId);
-                console.log('🎵 从混合器移除远程音频流:', userId);
             }
+            
+            if (this.gainNodes.has(userId)) {
+                this.gainNodes.get(userId).disconnect();
+                this.gainNodes.delete(userId);
+            }
+            
+            console.log('🎵 从混合器移除远程音频流:', userId);
         } catch (error) {
             console.error('❌ 移除远程音频流失败:', error);
         }
@@ -5437,6 +5529,14 @@ class AudioMixer {
     
     getMixedStream() {
         return this.mixedStream;
+    }
+    
+    // 设置音频音量
+    setVolume(userId, volume) {
+        const gainNode = this.gainNodes.get(userId);
+        if (gainNode) {
+            gainNode.gain.value = Math.max(0, Math.min(1, volume));
+        }
     }
     
     cleanup() {
@@ -5451,14 +5551,16 @@ class AudioMixer {
             });
             this.remoteSources.clear();
             
+            this.gainNodes.forEach((gainNode, userId) => {
+                gainNode.disconnect();
+            });
+            this.gainNodes.clear();
+            
             if (this.audioContext && this.audioContext.state !== 'closed') {
                 this.audioContext.close();
             }
             
-            this.audioContext = null;
-            this.destination = null;
-            this.mixedStream = null;
-            console.log('🎵 音频混合器已清理');
+            console.log('🎵 音频混合器清理完成');
         } catch (error) {
             console.error('❌ 音频混合器清理失败:', error);
         }
