@@ -1701,7 +1701,13 @@ app.use((err, req, res, next) => {
 });
 
 // 404处理 - 对于API请求返回JSON，对于页面请求返回index.html
-app.use((req, res) => {
+// 注意：不要处理Socket.IO相关的路径，让Socket.IO自己处理
+app.use((req, res, next) => {
+    // Socket.IO会自动处理 /socket.io/ 路径，不要在这里拦截
+    if (req.path.startsWith('/socket.io/')) {
+        return next(); // 让Socket.IO处理
+    }
+    
     if (req.path.startsWith('/api/')) {
         res.status(404).json({ error: '接口不存在' });
     } else {
