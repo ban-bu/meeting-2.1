@@ -2,7 +2,7 @@
 const CONFIG = {
     API_KEY: "sk-lNVAREVHjj386FDCd9McOL7k66DZCUkTp6IbV0u9970qqdlg",
     API_URL: "https://api.deepbricks.ai/v1/chat/completions",
-    MODEL: "GPT-4.1-mini"
+    MODEL: "gemini-2.5-flash"
 };
 
 // 全局移动端检测函数
@@ -3345,6 +3345,11 @@ async function generateSummary() {
     updateAIStatus('AI正在生成总结...', 'processing');
     
     try {
+        // 构建会议内容
+        const meetingContent = messages.map(m => `${m.author}: ${m.text}`).join('\n');
+        console.log('📝 准备生成总结，会议内容长度:', meetingContent.length);
+        console.log('📝 会议内容预览:', meetingContent.substring(0, 200) + '...');
+        
         const context = [
             {
                 role: 'system',
@@ -3352,9 +3357,12 @@ async function generateSummary() {
             },
             {
                 role: 'user',
-                content: `会议讨论内容：${messages.map(m => `${m.author}: ${m.text}`).join('\n')}`
+                content: `会议讨论内容：${meetingContent}`
             }
         ];
+        
+        console.log('🔗 正在调用AI API:', CONFIG.API_URL);
+        console.log('🔑 API Key 长度:', CONFIG.API_KEY.length);
         
         const response = await fetch(CONFIG.API_URL, {
             method: 'POST',
@@ -3370,12 +3378,23 @@ async function generateSummary() {
             })
         });
         
+        console.log('📡 API响应状态:', response.status, response.statusText);
+        
         if (!response.ok) {
-            throw new Error('AI总结服务异常');
+            const errorText = await response.text();
+            console.error('❌ API响应错误:', errorText);
+            throw new Error(`AI总结服务异常: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('✅ API响应成功:', data);
+        
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+            throw new Error('AI响应格式异常');
+        }
+        
         const summary = data.choices[0].message.content;
+        console.log('📋 生成的总结:', summary);
         
         // 在侧边栏显示总结
         summaryContent.innerHTML = `<div class="summary-text">${summary.replace(/\n/g, '<br>')}</div>`;
@@ -3386,19 +3405,152 @@ async function generateSummary() {
         updateAIStatus('AI正在监听...', 'listening');
         
     } catch (error) {
-        console.error('AI总结失败:', error);
+        console.error('❌ AI总结失败:', error);
+        console.error('❌ 错误详情:', {
+            message: error.message,
+            stack: error.stack,
+            config: {
+                apiUrl: CONFIG.API_URL,
+                model: CONFIG.MODEL,
+                hasApiKey: !!CONFIG.API_KEY
+            }
+        });
         
-        // 生成模拟总结
-        const mockSummary = generateMockSummary();
+        // 生成基于实际内容的模拟总结
+        const mockSummary = generateSmartMockSummary(messages);
         summaryContent.innerHTML = `<div class="summary-text">${mockSummary}</div>`;
         
         // 同时将模拟总结作为AI消息添加到聊天流中
         addMessage('ai', `📋 **会议总结**\n\n${mockSummary.replace(/<br>/g, '\n').replace(/<\/?strong>/g, '**')}`, 'AI助手', 'ai-assistant');
         
         updateAIStatus('AI正在监听...', 'listening');
+        
+        // 显示错误提示
+        showToast('AI服务暂时不可用，已生成基于讨论内容的总结', 'warning');
     } finally {
         isAIProcessing = false;
     }
+}
+
+// 生成智能模拟总结（基于实际会议内容）
+function generateSmartMockSummary(messages) {
+    if (!messages || messages.length === 0) {
+        return `
+            <strong>📋 会议总结</strong><br><br>
+            <strong>⚠️ 暂无讨论内容</strong><br>
+            请开始讨论后再次尝试生成总结。
+        `;
+    }
+    
+    // 分析会议内容
+    const userMessages = messages.filter(m => m.type === 'user');
+    const aiMessages = messages.filter(m => m.type === 'ai');
+    const participants = [...new Set(messages.map(m => m.author))];
+    
+    // 提取关键词和主题
+    const allText = messages.map(m => m.text).join(' ');
+    const commonTopics = extractCommonTopics(allText);
+    const keyPoints = extractKeyPoints(messages);
+    
+    // 生成基于实际内容的总结
+    let summary = `<strong>📋 会议总结</strong><br><br>`;
+    
+    // 主要讨论点
+    summary += `<strong>🎯 主要讨论点：</strong><br>`;
+    if (commonTopics.length > 0) {
+        commonTopics.forEach(topic => {
+            summary += `• ${topic}<br>`;
+        });
+    } else {
+        summary += `• 讨论了${userMessages.length}个话题<br>`;
+        summary += `• 涉及${participants.length}位参与者<br>`;
+    }
+    summary += `<br>`;
+    
+    // 达成共识
+    summary += `<strong>✅ 达成共识：</strong><br>`;
+    if (aiMessages.length > 0) {
+        summary += `• AI助手提供了${aiMessages.length}次协助<br>`;
+    }
+    summary += `• 会议持续了${Math.ceil((Date.now() - (messages[0]?.timestamp || Date.now())) / 60000)}分钟<br>`;
+    summary += `• 共有${participants.length}位参与者参与讨论<br>`;
+    summary += `<br>`;
+    
+    // 待解决问题
+    summary += `<strong>❓ 待解决问题：</strong><br>`;
+    if (keyPoints.length > 0) {
+        keyPoints.slice(0, 3).forEach(point => {
+            summary += `• ${point}<br>`;
+        });
+    } else {
+        summary += `• 需要进一步明确讨论方向<br>`;
+        summary += `• 建议制定具体的行动计划<br>`;
+    }
+    summary += `<br>`;
+    
+    // 下一步行动
+    summary += `<strong>🚀 下一步行动：</strong><br>`;
+    summary += `• 继续深入讨论关键议题<br>`;
+    summary += `• 制定详细的实施计划<br>`;
+    summary += `• 安排后续跟进会议<br>`;
+    
+    return summary;
+}
+
+// 提取常见主题
+function extractCommonTopics(text) {
+    const topics = [];
+    const lowerText = text.toLowerCase();
+    
+    // 常见技术主题
+    const techTopics = [
+        '技术', '架构', '开发', '部署', '测试', '优化', '性能', '安全',
+        '数据库', '前端', '后端', 'API', '微服务', '容器', '云服务',
+        '人工智能', '机器学习', '数据分析', '自动化'
+    ];
+    
+    techTopics.forEach(topic => {
+        if (lowerText.includes(topic)) {
+            topics.push(topic);
+        }
+    });
+    
+    // 常见业务主题
+    const businessTopics = [
+        '项目', '计划', '进度', '目标', '预算', '成本', '收益', '风险',
+        '团队', '合作', '沟通', '管理', '流程', '规范', '标准'
+    ];
+    
+    businessTopics.forEach(topic => {
+        if (lowerText.includes(topic)) {
+            topics.push(topic);
+        }
+    });
+    
+    return topics.slice(0, 5); // 最多返回5个主题
+}
+
+// 提取关键点
+function extractKeyPoints(messages) {
+    const points = [];
+    
+    // 查找包含关键词的消息
+    const keywords = ['问题', '需要', '建议', '重要', '关键', '注意', '考虑'];
+    
+    messages.forEach(msg => {
+        if (msg.type === 'user') {
+            keywords.forEach(keyword => {
+                if (msg.text.includes(keyword)) {
+                    const point = msg.text.substring(0, 50) + '...';
+                    if (!points.includes(point)) {
+                        points.push(point);
+                    }
+                }
+            });
+        }
+    });
+    
+    return points.slice(0, 3); // 最多返回3个关键点
 }
 
 // 获取用户头像颜色
@@ -3418,29 +3570,10 @@ function getAvatarColor(name) {
     return colors[Math.abs(hash) % colors.length];
 }
 
-// 生成模拟总结
+// 生成模拟总结（已废弃，使用generateSmartMockSummary替代）
 function generateMockSummary() {
-    return `
-        <strong>📋 会议总结</strong><br><br>
-        
-        <strong>🎯 主要讨论点：</strong><br>
-        • 技术架构方案讨论<br>
-        • 微服务与容器化部署<br>
-        • 项目实施计划<br><br>
-        
-        <strong>✅ 达成共识：</strong><br>
-        • 采用微服务架构方向<br>
-        • 优先考虑容器化部署<br><br>
-        
-        <strong>❓ 待解决问题：</strong><br>
-        • 具体技术选型细节<br>
-        • 团队技能储备评估<br><br>
-        
-        <strong>🚀 下一步行动：</strong><br>
-        • 制定详细技术方案<br>
-        • 安排技术调研<br>
-        • 下次会议确定时间表
-    `;
+    console.warn('⚠️ generateMockSummary已废弃，请使用generateSmartMockSummary');
+    return generateSmartMockSummary(messages);
 }
 
 // 导出总结
