@@ -180,6 +180,7 @@ class XfyunOfficialRTASR {
             });
         }
 
+<<<<<<< HEAD
         if (data.cn.st.type == 0) {
             // 最终识别结果 - 添加到实时记录框并同步到所有用户
             this.resultText += resultTextTemp;
@@ -189,6 +190,37 @@ class XfyunOfficialRTASR {
             // 最终结果同步到所有用户
             if (resultTextTemp.trim()) {
                 this.sendTranscriptionResult(resultTextTemp, false);
+=======
+        console.log('🔍 解析出的文本:', resultTextTemp);
+        console.log('🔍 文本长度:', resultTextTemp.length);
+
+        if (data.cn && data.cn.st) {
+            if (data.cn.st.type == 0) {
+                // 最终识别结果 - 添加到实时记录框并同步到所有用户
+                this.resultText += resultTextTemp;
+                this.resultTextTemp = "";
+                console.log('✅ 最终结果:', resultTextTemp);
+                
+                // 最终结果同步到所有用户
+                if (resultTextTemp.trim()) {
+                    this.sendTranscriptionResult(resultTextTemp, false);
+                    this.updateTranscriptDisplay(resultTextTemp);
+                } else {
+                    console.log('🚫 跳过空的最终结果');
+                }
+            } else {
+                // 临时结果 - 显示实时预览并同步到所有用户
+                this.resultTextTemp = resultTextTemp;
+                console.log('🔄 临时结果:', resultTextTemp);
+                
+                // 临时结果也同步到所有用户
+                if (resultTextTemp.trim()) {
+                    this.sendTranscriptionResult(resultTextTemp, true);
+                    this.updatePartialTranscription(resultTextTemp);
+                } else {
+                    console.log('🚫 跳过空的临时结果');
+                }
+>>>>>>> parent of 3e152b7 (1.2.9.14)
             }
         } else {
             // 临时结果 - 显示实时预览并同步到所有用户
